@@ -7,7 +7,8 @@ A personal [Claude Code](https://claude.com/claude-code) skills marketplace by
 [humanizer](https://github.com/blader/humanizer),
 [marketing-skills](https://github.com/coreyhaines31/marketingskills),
 [caveman](https://github.com/JuliusBrussee/caveman),
-and [ponytail](https://github.com/DietrichGebert/ponytail), all referenced from upstream,
+[godot-prompter](https://github.com/jame581/GodotPrompter) and
+[ponytail](https://github.com/DietrichGebert/ponytail), all referenced from upstream,
 and `rtk`, my own wrapper around [rtk](https://github.com/rtk-ai/rtk). It is where my
 own skills will be added over time.
 

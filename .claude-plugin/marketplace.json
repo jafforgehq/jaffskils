@@ -64,6 +64,15 @@
         "repo": "DietrichGebert/ponytail",
         "sha": "9cc65d03aa2da1db7121b912d03596409ee340b8"
       }
+    },
+    {
+      "name": "godot-prompter",
+      "description": "Godot 4 skills for GDScript and C# (only active inside a Godot project), tracked from upstream jame581/GodotPrompter",
+      "source": {
+        "source": "github",
+        "repo": "jame581/GodotPrompter",
+        "sha": "1e7d79d3cbbd6fd8016cd9cc77c6a79f342ea218"
+      }
     }
   ]
 }
