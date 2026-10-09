@@ -1,7 +1,7 @@
 # jaffskils: personal Claude Code marketplace
 
 Date: 2026-10-09
-Status: spec approved by user; `setup.sh` added at the user's request (section below)
+Status: spec approved by user; `setup.sh` and, later, "Exclusive mode" added at the user's request. Exclusive mode is awaiting the user's approval.
 
 ## Purpose
 
@@ -26,6 +26,7 @@ installs and updates everything from this one place on their machines.
 jaffskils/
 ├── .claude-plugin/marketplace.json
 ├── setup.sh
+├── tests/test-setup.sh
 ├── README.md
 └── docs/superpowers/specs/2026-10-09-jaffskils-marketplace-design.md
 ```
@@ -37,6 +38,7 @@ No `plugins/` directory until the first own plugin exists.
 ```json
 {
   "name": "jaffskils",
+  "description": "Personal Claude Code skills marketplace by jafforgehq",
   "owner": { "name": "jafforgehq" },
   "plugins": [
     {
@@ -107,6 +109,38 @@ Steps, in order:
 
 Properties: `set -euo pipefail`, idempotent (safe to re-run), no `sudo`, no network
 access beyond what the `claude` CLI does, and it never prints or reads credentials.
+
+## Exclusive mode: only jaffskils skills (added at the user's request)
+
+After a successful install, `setup.sh` makes jaffskils the only source of skills in
+the user's Claude Code config (`$CLAUDE_CONFIG_DIR`, default `~/.claude`):
+
+| What | Action | Recoverable? |
+|---|---|---|
+| Plugins from any other marketplace (user scope) | `claude plugin uninstall <name>@<marketplace> --scope user` | Yes, reinstall from that marketplace |
+| Marketplaces other than `jaffskils` | `claude plugin marketplace remove <name>`; the built-in Anthropic directory cannot be removed and is left | Yes, re-add |
+| Standalone skills in `$CLAUDE_CONFIG_DIR/skills/` except the app-managed `synced` folder | **Moved** to `$CLAUDE_CONFIG_DIR/skills-removed-<YYYY-MM-DD>/` (numeric suffix if that exists); never deleted. The script prints the one command that purges that folder | Yes, until the user purges it |
+| Plugins synced from claude.ai (`<name>@synced`) | `claude plugin disable <name>@synced`; they are account-managed and cannot be uninstalled | Yes, enable again |
+
+Why a move and not a delete: the standalone skills have no recorded origin, so a
+permanent delete cannot be undone. The user purges the backup folder themselves.
+
+Safeguards:
+
+- Install first, clean up second, so a failed install never leaves the user with nothing.
+- The script computes the cleanup list read-only at the start. If the list is not
+  empty it prints it and asks `Proceed? [y/N]`, reading the answer from
+  `${JAFFSKILS_TTY:-/dev/tty}`. With no terminal and no `--yes` it refuses
+  before changing anything (exit 1). An empty list needs no confirmation.
+- `--dry-run` prints the list and exits 0 without changing anything, including
+  no marketplace add and no install.
+- `--yes` skips the prompt. `--no-clean` installs without any cleanup.
+- Nothing belonging to `jaffskils` is ever removed. Project- and local-scope
+  installs in other directories are out of reach and left alone.
+
+Limits, stated in the README: Claude Code's built-in commands and skills, skills
+the Claude desktop app supplies, and organisation-managed plugins cannot be removed
+by a script.
 
 ## Install flow (goes in README)
 

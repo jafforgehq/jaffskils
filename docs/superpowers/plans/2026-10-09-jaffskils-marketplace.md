@@ -14,11 +14,11 @@
 
 - Marketplace name `jaffskils`; owner `{ "name": "jafforgehq" }`, no email; repo `jafforgehq/jaffskils`, public.
 - Superpowers entry: `"source": { "source": "github", "repo": "obra/superpowers" }`, with **no** `version`, `ref` or `sha`.
-- `setup.sh`: `set -euo pipefail`; idempotent; no `sudo`; installs with `--scope user`; flag `--no-auto-update`.
+- `setup.sh`: `set -euo pipefail`; idempotent; no `sudo`; installs with `--scope user`; flags `--no-auto-update`, `--dry-run`, `--yes`, `--no-clean`; never deletes user files (moves them to a backup folder).
 - Env vars: `JAFFSKILS_SOURCE` (default `jafforgehq/jaffskils`), `CLAUDE_CONFIG_DIR` (default `~/.claude`).
 - Auto-update is set as `extraKnownMarketplaces.jaffskils.autoUpdate = true` in `$CLAUDE_CONFIG_DIR/settings.json`; backup first to `settings.json.jaffskils.bak`; atomic write; keep all other keys.
 - JSON editing uses `python3`, never `sed -i` (macOS differs).
-- Every test and probe runs against a **throwaway** `CLAUDE_CONFIG_DIR`; the real `~/.claude` is never modified before the user approves (Task 6).
+- Every test and probe runs against a **throwaway** `CLAUDE_CONFIG_DIR`; the real `~/.claude` is never modified before the user approves (Task 7).
 - Commit messages end with `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
 
 ## Review Focus
@@ -30,6 +30,9 @@ Failure modes the spec implies; each has a named test in the owning task.
 3. `settings.json` already has other keys and other marketplaces: all preserved. (Task 4 `settings_other_keys_preserved`)
 4. Run as `curl | bash` (script on stdin, no script directory): works. (Task 3 `runs_from_stdin`)
 5. Re-run: no failure, no duplicates, settings byte-identical. (Task 3 `rerun_is_idempotent`, Task 4 asserts settings unchanged)
+
+6. Exclusive mode must never delete: skills move, never `rm`; the `synced` folder and anything from `jaffskils` are untouched; a second run the same day never overwrites an earlier backup. (Task 5 `case_cleanup_moves_standalone_skills`, `case_cleanup_backup_never_overwritten`)
+7. Cleanup with no terminal and no `--yes` refuses before changing anything. (Task 5 `case_cleanup_refused_without_terminal`)
 
 The throwaway config path contains a space (see Task 3 helper), so unquoted variables fail the tests.
 
@@ -115,23 +118,58 @@ Question: how do `claude plugin` and `settings.json` behave in an isolated confi
 - [ ] **Step 4:** Run all tests, `bash -n`, and `shellcheck` if installed. Expected: all `PASS`, no findings.
 - [ ] **Step 5:** Commit as `feat: enable marketplace auto-update from setup.sh`.
 
-### Task 5: README and spec layout
+### Task 5: Exclusive mode (remove skills that are not from jaffskils)
+
+Needs the user's approval of the spec section "Exclusive mode" before any step runs.
+
+**Files:**
+- Modify: `setup.sh`, `tests/test-setup.sh`, this plan (append `## Probe findings 2`)
+
+**Interfaces:**
+- Produces, CLI flags: `--dry-run`, `--yes`, `--no-clean`. Env: `JAFFSKILS_TTY` (default `/dev/tty`), the file the confirmation answer is read from.
+- Produces, functions in `setup.sh` (list functions print one item per line to stdout):
+  - `other_plugins` prints `name@marketplace` for every user-scope plugin whose marketplace is not `jaffskils` and not `synced`.
+  - `other_marketplaces` prints the names of removable marketplaces other than `jaffskils`.
+  - `standalone_skills` prints the entry names in `$CLAUDE_CONFIG_DIR/skills` except `synced` (nothing if the directory is missing).
+  - `synced_plugins` prints enabled `name@synced` ids.
+  - `confirm_cleanup` returns 0 on `y`/`Y` read from `${JAFFSKILS_TTY:-/dev/tty}`, otherwise 1 (unreadable terminal counts as no).
+  - `run_cleanup` performs the actions in the spec's table, one `Removed:` or `Moved:` line each.
+- Behaviour: compute the four lists first; if all are empty do nothing. Otherwise print them. `--dry-run` then exits 0. Else, unless `--yes`, `confirm_cleanup` must pass or the script exits 1 before changing anything. The install steps run next, then `run_cleanup`. The backup folder is `skills-removed-<YYYY-MM-DD>` with a `-2`, `-3`... suffix if it exists. Entries move with `mv --`, never `rm`.
+- Consumes: Task 3 and Task 4 flow; `settings_path`.
+
+- [ ] **Step 1: Probe in a throwaway config** and append `## Probe findings 2`: the JSON shape of `claude plugin list --json`; exit codes and messages of `claude plugin uninstall <id> --scope user`, `claude plugin marketplace remove <name>` and `claude plugin disable <id>`; how to build a tiny local fixture marketplace (one plugin, relative path, one skill); whether an `@synced` plugin can be reproduced in a throwaway config. If it cannot, ship the synced step as best-effort (warn on failure) and say so in the README.
+- [ ] **Step 2: Add tests** to `tests/test-setup.sh` (fixture marketplace `fixturemkt` with plugin `fixtureplug`, added and installed in the throwaway config before the run; seed skills `alpha` and `beta` plus `skills/synced/keep.txt`):
+  - `case_cleanup_removes_other_plugins_and_marketplaces`: `--yes`; `fixtureplug@fixturemkt` is gone, `fixturemkt` is not listed, `superpowers@jaffskils` is still installed.
+  - `case_cleanup_moves_standalone_skills`: `--yes`; `skills/` holds only `synced`; the backup folder holds `alpha` and `beta` byte-identical to the seeds; `synced/keep.txt` is untouched; stderr contains the purge command.
+  - `case_cleanup_backup_never_overwritten`: two runs on the same day with new seeds between them leave two distinct backup folders.
+  - `case_dry_run_changes_nothing`: `--dry-run`; exit 0; output names `fixtureplug`, `fixturemkt`, `alpha`; the seeds are untouched and `jaffskils` is not listed.
+  - `case_no_clean_flag_skips_cleanup`: `--no-clean`; fixture plugin and seeds remain.
+  - `case_cleanup_refused_without_terminal`: `JAFFSKILS_TTY=/nonexistent`, no `--yes`; exit 1 and nothing changed (jaffskils not added).
+  - `case_cleanup_declined_changes_nothing`: `JAFFSKILS_TTY` is a file containing `n`; exit 1; nothing changed.
+  - `case_cleanup_confirmed_at_prompt`: `JAFFSKILS_TTY` is a file containing `y`; cleanup happens.
+  - `case_cleanup_noop_when_clean`: a second `--yes` run exits 0 and prints that nothing needed removing.
+  - `case_cleanup_missing_skills_dir`: no `skills/` directory at all; run exits 0.
+- [ ] **Step 3:** Run the tests. Expected: the ten new cases `FAIL`; every earlier case still `PASS`.
+- [ ] **Step 4:** Implement the functions and flags above. Keep the existing early-exit order: flag parsing, `require_cmd`, settings check and backup, then the cleanup plan.
+- [ ] **Step 5:** Run all tests and `bash -n setup.sh`. Expected: all `PASS`.
+- [ ] **Step 6:** Commit as `feat: setup.sh removes skills that are not from jaffskils`.
+
+### Task 6: README and spec layout
 
 **Files:**
 - Create: `README.md`
-- Modify: `docs/superpowers/specs/2026-10-09-jaffskils-marketplace-design.md` (add `tests/test-setup.sh` to the repo layout block)
 
-- [ ] **Step 1:** Write `README.md` covering, in this order: what the repo is; the two `setup.sh` run commands from the spec; the manual install commands; the three update conditions and how to enable auto-update by hand; how to add an own skill (the three spec steps); how to run `tests/test-setup.sh`.
-- [ ] **Step 2:** Check the README against the spec: `grep -c` each of `setup.sh`, `jafforgehq/jaffskils`, `Enable auto-update`, `/reload-plugins`, `tests/test-setup.sh` and expect every count to be at least 1.
+- [ ] **Step 1:** Write `README.md` covering, in this order: what the repo is; the two `setup.sh` run commands from the spec; the manual install commands; the three update conditions and how to enable auto-update by hand; exclusive mode (what it moves or removes, the flags `--dry-run`, `--yes`, `--no-clean`, the backup folder and its purge command, and the limits the spec lists); how to add an own skill (the three spec steps); how to run `tests/test-setup.sh`.
+- [ ] **Step 2:** Check the README against the spec: `grep -c` each of `setup.sh`, `jafforgehq/jaffskils`, `Enable auto-update`, `/reload-plugins`, `tests/test-setup.sh`, `--dry-run`, `skills-removed` and expect every count to be at least 1.
 - [ ] **Step 3:** Commit as `docs: add README`.
 
-### Task 6: Publish and verify (needs the user's explicit yes)
+### Task 7: Publish and verify (needs the user's explicit yes)
 
 - [ ] **Step 1:** Run the full pre-publish check: `claude plugin validate . --strict`, `bash -n setup.sh`, `tests/test-setup.sh`. Expected: all pass.
 - [ ] **Step 2: Stop and ask the user to confirm** creating the **public** repo `jafforgehq/jaffskils` and pushing `main`. Do not continue without a clear yes.
 - [ ] **Step 3:** `gh repo create jafforgehq/jaffskils --public --source . --remote origin --push`. Expected: repo URL printed, `main` pushed.
 - [ ] **Step 4: Verify against the real GitHub source.** In a fresh throwaway `CLAUDE_CONFIG_DIR`, run `setup.sh` with `JAFFSKILS_SOURCE` unset; then run it as `curl -fsSL https://raw.githubusercontent.com/jafforgehq/jaffskils/main/setup.sh | bash`. Expected: both exit 0, `superpowers@jaffskils` installed, auto-update recorded.
-- [ ] **Step 5:** Report the results to the user and **ask** before running `setup.sh` against their real `~/.claude`.
+- [ ] **Step 5:** Report the results to the user. Then run `setup.sh --dry-run` against the real `~/.claude` (it changes nothing), show the user the exact list it prints, and **ask** before running it for real.
 
 ---
 
