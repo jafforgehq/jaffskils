@@ -156,8 +156,188 @@ case_no_auto_update_flag() {
   [[ ! -e "$(settings_file).jaffskils.bak" ]] || fail "a backup was made although settings were not edited"
 }
 
+# --- exclusive mode -------------------------------------------------------
+
+FIXTURE=""
+
+# A tiny marketplace (one plugin, one skill) standing in for "somebody else's".
+make_fixture() {
+  FIXTURE="$RUN_ROOT/fixture-mkt"
+  mkdir -p "$FIXTURE/.claude-plugin" "$FIXTURE/plugins/fixtureplug/.claude-plugin" \
+    "$FIXTURE/plugins/fixtureplug/skills/fixtureskill"
+  cat >"$FIXTURE/.claude-plugin/marketplace.json" <<'JSON'
+{
+  "name": "fixturemkt",
+  "description": "Test fixture marketplace",
+  "owner": { "name": "tests" },
+  "plugins": [ { "name": "fixtureplug", "description": "Fixture plugin", "source": "./plugins/fixtureplug" } ]
+}
+JSON
+  printf '%s\n' '{ "name": "fixtureplug", "description": "Fixture plugin" }' \
+    >"$FIXTURE/plugins/fixtureplug/.claude-plugin/plugin.json"
+  printf -- '---\nname: fixtureskill\ndescription: Fixture skill\n---\nFixture.\n' \
+    >"$FIXTURE/plugins/fixtureplug/skills/fixtureskill/SKILL.md"
+}
+
+add_fixture_plugin() {
+  claude plugin marketplace add "$FIXTURE" </dev/null >/dev/null 2>&1 &&
+    claude plugin install fixtureplug@fixturemkt --scope user </dev/null >/dev/null 2>&1
+}
+
+seed_skills() {
+  mkdir -p "$CLAUDE_CONFIG_DIR/skills/alpha" "$CLAUDE_CONFIG_DIR/skills/beta" "$CLAUDE_CONFIG_DIR/skills/synced"
+  printf 'alpha skill\n' >"$CLAUDE_CONFIG_DIR/skills/alpha/SKILL.md"
+  printf 'beta skill\n' >"$CLAUDE_CONFIG_DIR/skills/beta/SKILL.md"
+  printf 'keep\n' >"$CLAUDE_CONFIG_DIR/skills/synced/keep.txt"
+}
+
+backup_dirs() { ls -d "$CLAUDE_CONFIG_DIR"/skills-removed-* 2>/dev/null; }
+
+fixture_installed() { json_has_plugin fixtureplug@fixturemkt 2>/dev/null; }
+
+case_cleanup_removes_other_plugins_and_marketplaces() {
+  add_fixture_plugin || fail "could not set up the fixture plugin"
+  fixture_installed || fail "fixture plugin not installed before the run"
+  run_setup --yes
+  assert_eq "$RC" 0 "exit code"
+  if fixture_installed; then fail "fixture plugin is still installed"; fi
+  if marketplace_names | grep -qx fixturemkt; then fail "fixture marketplace is still listed"; fi
+  json_has_plugin superpowers@jaffskils || fail "a jaffskils plugin was removed"
+  assert_eq "$(json_get "$(settings_file)" extraKnownMarketplaces jaffskils autoUpdate)" true "autoUpdate after cleanup"
+}
+
+case_cleanup_moves_standalone_skills() {
+  seed_skills
+  run_setup --yes
+  assert_eq "$RC" 0 "exit code"
+  assert_eq "$(ls -A "$CLAUDE_CONFIG_DIR/skills")" synced "what is left in skills/"
+  local b
+  b=$(backup_dirs)
+  [[ -n $b ]] || fail "no backup folder was created"
+  cmp -s "$b/alpha/SKILL.md" <(printf 'alpha skill\n') || fail "alpha was not moved intact"
+  cmp -s "$b/beta/SKILL.md" <(printf 'beta skill\n') || fail "beta was not moved intact"
+  assert_eq "$(cat "$CLAUDE_CONFIG_DIR/skills/synced/keep.txt")" keep "synced folder content"
+  grep -q "rm -rf" "$ENV_DIR.err" || fail "the purge command was not printed"
+}
+
+case_cleanup_backup_never_overwritten() {
+  seed_skills
+  run_setup --yes
+  assert_eq "$RC" 0 "first run exit code"
+  mkdir -p "$CLAUDE_CONFIG_DIR/skills/gamma"
+  printf 'gamma skill\n' >"$CLAUDE_CONFIG_DIR/skills/gamma/SKILL.md"
+  run_setup --yes
+  assert_eq "$RC" 0 "second run exit code"
+  assert_eq "$(backup_dirs | wc -l | tr -d ' ')" 2 "number of backup folders"
+  [[ -f "$(backup_dirs | sed -n 1p)/alpha/SKILL.md" ]] || fail "the first backup lost alpha"
+  [[ -f "$(backup_dirs | sed -n 2p)/gamma/SKILL.md" ]] || fail "the second backup does not hold gamma"
+}
+
+case_dry_run_changes_nothing() {
+  add_fixture_plugin || fail "could not set up the fixture plugin"
+  seed_skills
+  run_setup --dry-run
+  assert_eq "$RC" 0 "exit code"
+  cat "$ENV_DIR.out" "$ENV_DIR.err" >"$ENV_DIR.all"
+  local w
+  for w in fixtureplug fixturemkt alpha; do
+    grep -q "$w" "$ENV_DIR.all" || fail "dry-run output does not mention $w"
+  done
+  fixture_installed || fail "dry run uninstalled the fixture plugin"
+  [[ -d "$CLAUDE_CONFIG_DIR/skills/alpha" ]] || fail "dry run moved a skill"
+  [[ ! -e "$(settings_file).jaffskils.bak" ]] || fail "dry run made a settings backup"
+  if marketplace_names | grep -qx jaffskils; then fail "dry run added the jaffskils marketplace"; fi
+}
+
+case_dry_run_with_no_clean_is_a_usage_error() {
+  run_setup --dry-run --no-clean
+  assert_eq "$RC" 2 "exit code"
+  grep -q "cannot be combined" "$ENV_DIR.err" || fail "stderr does not explain the conflicting flags"
+}
+
+case_no_clean_flag_skips_cleanup() {
+  add_fixture_plugin || fail "could not set up the fixture plugin"
+  seed_skills
+  run_setup --no-clean
+  assert_eq "$RC" 0 "exit code"
+  fixture_installed || fail "the fixture plugin was removed despite --no-clean"
+  [[ -d "$CLAUDE_CONFIG_DIR/skills/alpha" ]] || fail "a skill was moved despite --no-clean"
+  json_has_plugin superpowers@jaffskils || fail "superpowers was not installed"
+}
+
+case_cleanup_refused_without_terminal() {
+  add_fixture_plugin || fail "could not set up the fixture plugin"
+  seed_skills
+  JAFFSKILS_TTY=/nonexistent run_setup
+  assert_eq "$RC" 1 "exit code"
+  grep -q -- --yes "$ENV_DIR.err" || fail "stderr does not mention --yes"
+  fixture_installed || fail "the fixture plugin was removed"
+  [[ -d "$CLAUDE_CONFIG_DIR/skills/alpha" ]] || fail "a skill was moved"
+  if marketplace_names | grep -qx jaffskils; then fail "the marketplace was added before the refusal"; fi
+}
+
+case_cleanup_declined_changes_nothing() {
+  add_fixture_plugin || fail "could not set up the fixture plugin"
+  seed_skills
+  printf 'n\n' >"$ENV_DIR.answer"
+  JAFFSKILS_TTY="$ENV_DIR.answer" run_setup
+  assert_eq "$RC" 1 "exit code"
+  fixture_installed || fail "the fixture plugin was removed"
+  [[ -d "$CLAUDE_CONFIG_DIR/skills/alpha" ]] || fail "a skill was moved"
+}
+
+case_cleanup_confirmed_at_prompt() {
+  add_fixture_plugin || fail "could not set up the fixture plugin"
+  seed_skills
+  printf 'y\n' >"$ENV_DIR.answer"
+  JAFFSKILS_TTY="$ENV_DIR.answer" run_setup
+  assert_eq "$RC" 0 "exit code"
+  if fixture_installed; then fail "the fixture plugin is still installed"; fi
+  [[ ! -d "$CLAUDE_CONFIG_DIR/skills/alpha" ]] || fail "alpha was not moved"
+}
+
+case_cleanup_noop_when_clean() {
+  add_fixture_plugin || fail "could not set up the fixture plugin"
+  run_setup --yes
+  assert_eq "$RC" 0 "first run exit code"
+  run_setup --yes
+  assert_eq "$RC" 0 "second run exit code"
+  grep -q "Nothing to clean up" "$ENV_DIR.err" || fail "second run did not report a clean state"
+}
+
+case_cleanup_missing_skills_dir() {
+  add_fixture_plugin || fail "could not set up the fixture plugin"
+  run_setup --yes
+  assert_eq "$RC" 0 "exit code"
+  [[ ! -e "$CLAUDE_CONFIG_DIR/skills" ]] || fail "a skills directory appeared"
+  assert_eq "$(backup_dirs | wc -l | tr -d ' ')" 0 "number of backup folders"
+}
+
+# Synced plugins cannot be created in a throwaway config, so a shim reports one
+# and records disable calls; everything else goes to the real CLI.
+case_cleanup_disables_synced_plugins() {
+  local bin="$ENV_DIR.bin" real
+  real=$(command -v claude)
+  mkdir -p "$bin"
+  cat >"$bin/claude" <<SHIM
+#!/usr/bin/env bash
+if [[ "\$1 \$2 \$3" == "plugin list --json" ]]; then
+  "$real" "\$@" | python3 -I -c 'import json,sys; d=json.load(sys.stdin); d.append({"id":"demo@synced","version":"1","scope":"synced","enabled":True,"installPath":"/x"}); print(json.dumps(d))'
+elif [[ "\$1 \$2" == "plugin disable" ]]; then
+  echo "\$3" >>"$ENV_DIR.disabled"
+else
+  exec "$real" "\$@"
+fi
+SHIM
+  chmod +x "$bin/claude"
+  PATH="$bin:$PATH" run_setup --yes
+  assert_eq "$RC" 0 "exit code"
+  assert_eq "$(cat "$ENV_DIR.disabled")" demo@synced "plugin passed to disable"
+}
+
 main() {
   RUN_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/jaffskils-tests.XXXXXX") || exit 1
+  make_fixture
   local failed=0 c rc
   for c in $(declare -F | awk '{print $3}' | grep '^case_'); do
     ( set -e; new_env; "$c" )
