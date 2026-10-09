@@ -19,7 +19,7 @@
       "description": "Up-to-date library documentation lookup, tracked from upstream upstash/context7",
       "source": {
         "source": "git-subdir",
-        "url": "upstash/context7",
+        "url": "https://github.com/upstash/context7.git",
         "path": "plugins/claude/context7",
         "sha": "522c4db4fa2e1e31f1b320f09fa8c8fab376987a"
       }

@@ -15,7 +15,7 @@ for plugin in data["plugins"]:
     src = plugin["source"]
     if not isinstance(src, dict):
         continue  # local plugin, versioned by commit
-    repo = src.get("repo") or src["url"]
+    repo = src.get("repo") or src["url"].removeprefix("https://github.com/").removesuffix(".git")
     sha = subprocess.check_output(
         ["gh", "api", f"repos/{repo}/commits/HEAD", "-q", ".sha"], text=True).strip()
     if src.get("sha") != sha:
