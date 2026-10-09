@@ -1,7 +1,7 @@
 # jaffskils: personal Claude Code marketplace
 
 Date: 2026-10-09
-Status: spec approved by user; `setup.sh` and, later, "Exclusive mode" added at the user's request. Exclusive mode is awaiting the user's approval.
+Status: spec approved by user; `setup.sh` and, later, "Exclusive mode" added at the user's request. Exclusive mode approved by the user, who also asked for atlassian and swift-lsp to be removed.
 
 ## Purpose
 
