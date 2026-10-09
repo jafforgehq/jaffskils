@@ -132,3 +132,24 @@ Question: how do `claude plugin` and `settings.json` behave in an isolated confi
 - [ ] **Step 3:** `gh repo create jafforgehq/jaffskils --public --source . --remote origin --push`. Expected: repo URL printed, `main` pushed.
 - [ ] **Step 4: Verify against the real GitHub source.** In a fresh throwaway `CLAUDE_CONFIG_DIR`, run `setup.sh` with `JAFFSKILS_SOURCE` unset; then run it as `curl -fsSL https://raw.githubusercontent.com/jafforgehq/jaffskils/main/setup.sh | bash`. Expected: both exit 0, `superpowers@jaffskils` installed, auto-update recorded.
 - [ ] **Step 5:** Report the results to the user and **ask** before running `setup.sh` against their real `~/.claude`.
+
+---
+
+## Probe findings
+
+Measured 2026-10-09 with Claude Code 2.1.292, against a throwaway `CLAUDE_CONFIG_DIR` and the local repo path as the marketplace source.
+
+1. **Isolation works.** With `CLAUDE_CONFIG_DIR` set, everything lands under it (`settings.json`, `.claude.json`, `plugins/`). The checksums of the real `~/.claude/settings.json`, `plugins/known_marketplaces.json`, `plugins/installed_plugins.json` and `~/.claude.json` were identical before and after. The `HOME` fallback was not needed.
+2. **`marketplace add <source>`** exits 0. It creates `$CLAUDE_CONFIG_DIR/settings.json` if absent and writes `extraKnownMarketplaces.jaffskils.source` into it (for a path: `{"source":"directory","path":"<abs path>"}`), and records the marketplace in `plugins/known_marketplaces.json`.
+3. **`marketplace list --json`** prints a JSON array of objects with keys `name`, `source` (a type string such as `"directory"`), `path` and `installLocation`. Built-in marketplaces do not appear in the JSON. `installLocation` is the checkout to read `.claude-plugin/marketplace.json` from. A GitHub source will carry a repo field instead of `path`; that case is unverified until Task 6.
+4. **`install superpowers@jaffskils --scope user`** works with no login and exits 0. It adds the key `superpowers@jaffskils` to `plugins/installed_plugins.json` (scope `user`, version 6.4.2 at the time) and sets `enabledPlugins["superpowers@jaffskils"] = true` in `settings.json`.
+5. **Repeats are harmless.** A second `install` exits 0 with `already installed (scope: user)`. A second `marketplace add` of the same source exits 0 with `already on disk — declared in user settings`. `setup.sh` needs no special handling for either.
+6. **Auto-update entry shape (docs, not CLI-confirmed).** The `extraKnownMarketplaces.<name>` entry takes a boolean `autoUpdate` beside `source`:
+   `{ "source": { ... }, "autoUpdate": true }` (verbatim example on the plugins/org docs page; the plugins/loading page says this entry is the first source consulted for auto-update). The CLI does not report it: after setting it, `list --json` and `known_marketplaces.json` were unchanged, though the key survived `marketplace update` in `settings.json`. Tests can therefore assert only on `settings.json`; real auto-update behaviour rests on the docs.
+
+### Consequences for Tasks 3 and 4
+
+- `setup.sh` may skip `marketplace add` when the marketplace is already listed (as planned), but calling it again would also be safe.
+- In the end-to-end flow `settings.json` already exists, with the marketplace entry and `enabledPlugins`, by the time auto-update is set. `enable_auto_update` therefore sets `autoUpdate: true` on the existing entry and keeps `source` untouched.
+- If the entry or the whole file is absent (for example the user deleted it and re-ran), `enable_auto_update` creates the entry with a derived source: `{"source":"directory","path":<absolute path>}` when `JAFFSKILS_SOURCE` is an existing directory, otherwise `{"source":"github","repo":<JAFFSKILS_SOURCE>}`.
+- Task 4's `case_autoupdate_creates_missing_settings` is reached end-to-end by running once, deleting `settings.json`, and re-running. Its assertion is that the file is recreated with the `jaffskils` entry and `autoUpdate == true`; it does not assert that the file holds nothing else.
