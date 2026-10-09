@@ -335,11 +335,36 @@ SHIM
   assert_eq "$(cat "$ENV_DIR.disabled")" demo@synced "plugin passed to disable"
 }
 
+# A step failing part-way through cleanup must say that auto-update is still off
+# and that re-running is safe; the shim makes `marketplace remove` fail.
+case_cleanup_failure_names_next_step() {
+  add_fixture_plugin || fail "could not set up the fixture plugin"
+  local bin="$ENV_DIR.bin" real
+  real=$(command -v claude)
+  mkdir -p "$bin"
+  cat >"$bin/claude" <<SHIM
+#!/usr/bin/env bash
+if [[ "\$1 \$2 \$3" == "plugin marketplace remove" ]]; then
+  echo "simulated failure" >&2
+  exit 1
+fi
+exec "$real" "\$@"
+SHIM
+  chmod +x "$bin/claude"
+  PATH="$bin:$PATH" run_setup --yes
+  assert_eq "$RC" 1 "exit code"
+  grep -q "Auto-update has NOT been enabled" "$ENV_DIR.err" || fail "stderr does not say auto-update is still off"
+  grep -q "safe to re-run" "$ENV_DIR.err" || fail "stderr does not say re-running is safe"
+  assert_eq "$(json_get "$(settings_file)" extraKnownMarketplaces jaffskils autoUpdate)" MISSING "autoUpdate after a failed cleanup"
+}
+
+# Usage: tests/test-setup.sh [substring]  (run only the cases whose name contains it)
 main() {
   RUN_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/jaffskils-tests.XXXXXX") || exit 1
   make_fixture
   local failed=0 c rc
   for c in $(declare -F | awk '{print $3}' | grep '^case_'); do
+    [[ -z ${1:-} || $c == *"$1"* ]] || continue
     ( set -e; new_env; "$c" )
     rc=$?
     if [[ $rc -eq 0 ]]; then echo "PASS ${c#case_}"; else echo "FAIL ${c#case_}"; failed=$((failed + 1)); fi
@@ -353,4 +378,4 @@ main() {
   fi
 }
 
-main
+main "$@"

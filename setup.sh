@@ -204,26 +204,30 @@ run_cleanup() {
   local item backup=""
   while IFS= read -r item; do
     [[ -n $item ]] || continue
-    claude plugin uninstall "$item" --scope user </dev/null || die "could not uninstall $item"
+    claude plugin uninstall "$item" --scope user </dev/null ||
+      { echo "setup.sh: could not uninstall $item" >&2; return 1; }
     echo "Removed: plugin $item" >&2
   done <<<"$1"
   while IFS= read -r item; do
     [[ -n $item ]] || continue
-    claude plugin marketplace remove "$item" </dev/null || die "could not remove marketplace $item"
+    claude plugin marketplace remove "$item" </dev/null ||
+      { echo "setup.sh: could not remove marketplace $item" >&2; return 1; }
     echo "Removed: marketplace $item" >&2
   done <<<"$2"
   while IFS= read -r item; do
     [[ -n $item ]] || continue
-    claude plugin disable "$item" </dev/null || die "could not disable $item"
+    claude plugin disable "$item" </dev/null ||
+      { echo "setup.sh: could not disable $item" >&2; return 1; }
     echo "Disabled: $item" >&2
   done <<<"$4"
   while IFS= read -r item; do
     [[ -n $item ]] || continue
     if [[ -z $backup ]]; then
       backup=$(next_backup_dir)
-      mkdir -- "$backup"
+      mkdir -- "$backup" || { echo "setup.sh: could not create $backup" >&2; return 1; }
     fi
-    mv -- "$(skills_dir)/$item" "$backup/"
+    mv -- "$(skills_dir)/$item" "$backup/" ||
+      { echo "setup.sh: could not move skill $item" >&2; return 1; }
     echo "Moved: skill $item" >&2
   done <<<"$3"
   if [[ -n $backup ]]; then
@@ -310,7 +314,9 @@ main() {
   # Cleanup runs after the install succeeds, and before enable_auto_update so no
   # later CLI write can disturb the autoUpdate flag.
   if [[ $has_cleanup -eq 1 ]]; then
-    run_cleanup "$plugins" "$markets" "$skills" "$synced"
+    local hint="Fix the cause above and re-run setup.sh; it is safe to re-run."
+    [[ $AUTO_UPDATE -eq 0 ]] || hint="Auto-update has NOT been enabled yet. $hint"
+    run_cleanup "$plugins" "$markets" "$skills" "$synced" || die "cleanup stopped part-way. $hint"
   fi
 
   if [[ $AUTO_UPDATE -eq 1 ]]; then

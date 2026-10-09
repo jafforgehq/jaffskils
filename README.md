@@ -22,7 +22,15 @@ curl -fsSL https://raw.githubusercontent.com/jafforgehq/jaffskils/main/setup.sh 
 ```
 
 Look before you leap: `setup.sh --dry-run` prints what it would change and
-changes nothing. Afterwards run `/reload-plugins` in Claude Code, or restart it.
+changes nothing. With the curl form, pass flags after `bash -s --`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jafforgehq/jaffskils/main/setup.sh | bash -s -- --dry-run
+```
+
+Afterwards run `/reload-plugins` in Claude Code, or restart it. The first run saves
+your original `settings.json` as `settings.json.jaffskils.bak` and never overwrites
+that copy.
 
 | Flag | Effect |
 |---|---|
@@ -41,7 +49,7 @@ from your Claude Code config (`~/.claude`, or `$CLAUDE_CONFIG_DIR`):
 | What | What happens |
 |---|---|
 | Plugins from other marketplaces (user scope) | Uninstalled |
-| Marketplaces other than jaffskils | Removed. This also uninstalls their plugins, wherever they were installed |
+| Marketplaces other than jaffskils, including Anthropic's `claude-plugins-official` | Removed. This also uninstalls their plugins, wherever they were installed, and deletes those plugins' saved options and data. Only the built-in Anthropic directory stays. Claude Code may re-add `claude-plugins-official` in a later session; it adds no skills, and re-running removes it again. To get it back: `claude plugin marketplace add anthropics/claude-plugins-official` |
 | Standalone skills in `~/.claude/skills` (except the app-managed `synced` folder) | **Moved** to `~/.claude/skills-removed-<date>/`, never deleted |
 | Plugins synced from claude.ai | Disabled (they are account-managed and cannot be uninstalled) |
 
@@ -59,6 +67,9 @@ Claude desktop app supplies, and organisation-managed plugins.
 /plugin marketplace add jafforgehq/jaffskils
 /plugin install superpowers@jaffskils
 ```
+
+If superpowers is also installed from another marketplace, its hooks run twice, so
+use one source only.
 
 ## Updates
 

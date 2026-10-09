@@ -118,7 +118,7 @@ the user's Claude Code config (`$CLAUDE_CONFIG_DIR`, default `~/.claude`):
 | What | Action | Recoverable? |
 |---|---|---|
 | Plugins from any other marketplace (user scope) | `claude plugin uninstall <name>@<marketplace> --scope user` | Yes, reinstall from that marketplace |
-| Marketplaces other than `jaffskils` | `claude plugin marketplace remove <name>`; the built-in Anthropic directory cannot be removed and is left | Yes, re-add |
+| Marketplaces other than `jaffskils`, including Anthropic's `claude-plugins-official` | `claude plugin marketplace remove <name>`. Only the built-in directory (`anthropic-plugin-directory`) cannot be removed and is left. Removing a marketplace also uninstalls its plugins and deletes their saved options and data. Claude Code may re-register `claude-plugins-official` in a later interactive session; that adds no skills, and re-running removes it again | Yes, re-add; the plugins' saved options and data are not restored |
 | Standalone skills in `$CLAUDE_CONFIG_DIR/skills/` except the app-managed `synced` folder | **Moved** to `$CLAUDE_CONFIG_DIR/skills-removed-<YYYY-MM-DD>/` (numeric suffix if that exists); never deleted. The script prints the one command that purges that folder | Yes, until the user purges it |
 | Plugins synced from claude.ai (`<name>@synced`) | `claude plugin disable <name>@synced`; they are account-managed and cannot be uninstalled | Yes, enable again |
 
