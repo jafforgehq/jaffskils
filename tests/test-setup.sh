@@ -416,7 +416,7 @@ main() {
   local failed=0 c rc
   for c in $(declare -F | awk '{print $3}' | grep '^case_'); do
     [[ -z ${1:-} || $c == *"$1"* ]] || continue
-    ( set -e; new_env; "$c" )
+    ( set -e; new_env; trap 'rc=$?; [[ $rc -eq 0 ]] || tail -n 20 "$ENV_DIR.err" >&2' EXIT; "$c" )
     rc=$?
     if [[ $rc -eq 0 ]]; then echo "PASS ${c#case_}"; else echo "FAIL ${c#case_}"; failed=$((failed + 1)); fi
   done
