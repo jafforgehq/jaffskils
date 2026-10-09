@@ -51,6 +51,16 @@ case_installs_everything() {
   assert_eq "$RC" 0 "exit code"
   marketplace_names | grep -qx jaffskils || fail "jaffskils is not a configured marketplace"
   json_has_plugin superpowers@jaffskils || fail "superpowers@jaffskils is not installed"
+  json_has_plugin context7@jaffskils || fail "context7@jaffskils is not installed"
+  json_has_plugin rtk@jaffskils || fail "rtk@jaffskils is not installed"
+}
+
+case_rtk_hook_passes_through_without_rtk() {
+  local out
+  out=$(echo '{"tool_input":{"command":"git status"}}' |
+    PATH=/nonexistent /bin/bash "$REPO_ROOT/plugins/rtk/hooks/rtk-rewrite.sh") ||
+    fail "hook failed when rtk is missing"
+  assert_eq "$out" "" "hook output without rtk"
 }
 
 case_rerun_is_idempotent() {

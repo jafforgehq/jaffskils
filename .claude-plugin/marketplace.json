@@ -1,12 +1,63 @@
 {
   "name": "jaffskils",
   "description": "Personal Claude Code skills marketplace by jafforgehq",
-  "owner": { "name": "jafforgehq" },
+  "owner": {
+    "name": "jafforgehq"
+  },
   "plugins": [
     {
       "name": "superpowers",
       "description": "Superpowers skills, tracked from upstream obra/superpowers",
-      "source": { "source": "github", "repo": "obra/superpowers" }
+      "source": {
+        "source": "github",
+        "repo": "obra/superpowers"
+      }
+    },
+    {
+      "name": "context7",
+      "description": "Up-to-date library documentation lookup, tracked from upstream upstash/context7",
+      "source": {
+        "source": "git-subdir",
+        "url": "upstash/context7",
+        "path": "plugins/claude/context7"
+      }
+    },
+    {
+      "name": "rtk",
+      "description": "Rewrites Bash commands through rtk to cut token use; needs the rtk binary",
+      "source": "./plugins/rtk"
+    },
+    {
+      "name": "humanizer",
+      "description": "Rewrites AI-sounding text so it reads naturally, tracked from upstream blader/humanizer",
+      "source": {
+        "source": "github",
+        "repo": "blader/humanizer"
+      }
+    },
+    {
+      "name": "marketing-skills",
+      "description": "Marketing skills: conversion, copywriting, SEO, paid ads, growth; tracked from upstream coreyhaines31/marketingskills",
+      "source": {
+        "source": "github",
+        "repo": "coreyhaines31/marketingskills"
+      }
+    },
+    {
+      "name": "caveman",
+      "description": "Ultra-compressed communication mode, tracked from upstream JuliusBrussee/caveman",
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman"
+      }
+    },
+    {
+      "name": "ponytail",
+      "description": "Lazy senior dev mode: simplest solution that works, tracked from upstream DietrichGebert/ponytail",
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail"
+      }
     }
   ]
 }

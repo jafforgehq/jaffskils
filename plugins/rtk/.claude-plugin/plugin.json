@@ -1,0 +1,5 @@
+{
+  "name": "rtk",
+  "description": "Rewrites Bash commands through rtk to cut token use (needs the rtk binary and jq)",
+  "author": { "name": "jafforgehq" }
+}

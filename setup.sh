@@ -325,6 +325,10 @@ main() {
   fi
 
   echo "Installed from $MARKETPLACE: $(echo "$names" | tr '\n' ' ')" >&2
+  if ! command -v rtk >/dev/null 2>&1; then
+    echo "Note: the rtk plugin needs the rtk binary and does nothing without it." >&2
+    echo "Install it with: brew install rtk-ai/tap/rtk" >&2
+  fi
   echo "Run /reload-plugins in Claude Code, or restart it, to load them." >&2
 }
 

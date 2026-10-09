@@ -2,8 +2,14 @@
 
 A personal [Claude Code](https://claude.com/claude-code) skills marketplace by
 [jafforgehq](https://github.com/jafforgehq). It currently lists
-[superpowers](https://github.com/obra/superpowers), referenced from upstream, and
-is where my own skills will be added over time.
+[superpowers](https://github.com/obra/superpowers) and
+[context7](https://github.com/upstash/context7),
+[humanizer](https://github.com/blader/humanizer),
+[marketing-skills](https://github.com/coreyhaines31/marketingskills),
+[caveman](https://github.com/JuliusBrussee/caveman) and
+[ponytail](https://github.com/DietrichGebert/ponytail), all referenced from upstream,
+and `rtk`, my own wrapper around [rtk](https://github.com/rtk-ai/rtk). It is where my
+own skills will be added over time.
 
 ## Set up a machine
 
@@ -61,6 +67,20 @@ command.
 What a script cannot remove: Claude Code's built-in commands and skills, skills the
 Claude desktop app supplies, and organisation-managed plugins.
 
+## Behaviour-changing plugins
+
+`caveman` and `ponytail` register SessionStart hooks that change how Claude answers
+in every session (terse prose, and simplest-possible code). Disable one with
+`/plugin` if you want normal output back.
+
+## rtk
+
+rtk shrinks command output before it reaches the context window. The `rtk` plugin
+adds a PreToolUse hook that rewrites Bash commands through `rtk rewrite`, plus a
+small skill. The plugin does not install the binary; get it with
+`brew install rtk-ai/tap/rtk` (the hook also needs `jq`). Without them the hook
+leaves commands unchanged. Do not also run `rtk init -g`, or the hook runs twice.
+
 ## Install by hand
 
 ```
@@ -93,7 +113,8 @@ Upstream changes reach you only when all three of these hold:
    `"source": "./plugins/<name>"` and no `version`.
 3. Push. With auto-update on, the change reaches my machines.
 
-Check the manifest with `claude plugin validate . --strict`.
+Check the manifest with `claude plugin validate .`. A "no version specified"
+warning is expected for plugins without a `version`.
 
 ## Tests
 
