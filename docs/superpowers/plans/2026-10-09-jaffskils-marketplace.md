@@ -191,3 +191,23 @@ Measured 2026-10-09 with Claude Code 2.1.292, against a throwaway `CLAUDE_CONFIG
 - In the end-to-end flow `settings.json` already exists, with the marketplace entry and `enabledPlugins`, by the time auto-update is set. `enable_auto_update` therefore sets `autoUpdate: true` on the existing entry and keeps `source` untouched.
 - If the entry or the whole file is absent (for example the user deleted it and re-ran), `enable_auto_update` creates the entry with a derived source: `{"source":"directory","path":<absolute path>}` when `JAFFSKILS_SOURCE` is an existing directory, otherwise `{"source":"github","repo":<JAFFSKILS_SOURCE>}`.
 - Task 4's `case_autoupdate_creates_missing_settings` is reached end-to-end by running once, deleting `settings.json`, and re-running. Its assertion is that the file is recreated with the `jaffskils` entry and `autoUpdate == true`; it does not assert that the file holds nothing else.
+
+---
+
+## Probe findings 2
+
+Measured 2026-10-09 with Claude Code 2.1.292 in a throwaway `CLAUDE_CONFIG_DIR`, using a local fixture marketplace (`fixturemkt`, one plugin `fixtureplug` with a relative-path source and one skill). The real config was only read.
+
+1. **`claude plugin list --json`** prints an array of objects with `id` (`name@marketplace`), `version`, `scope`, `enabled` and `installPath`. `scope` is `user`, `project`, `local` or `synced`. Plugins synced from claude.ai appear with `scope: "synced"` and ids ending `@synced`.
+2. **`plugin uninstall <id> --scope user`**: exit 0 and `Successfully uninstalled`. Uninstalling something not installed exits 1 (`not found in installed plugins`).
+3. **`plugin marketplace remove <name>`**: exit 0; removing an absent one exits 1. Removing a marketplace **also uninstalls its installed plugins** and deletes their saved options and data, and prints which ones. So marketplace removal can reach plugins outside the user scope; the README says so.
+4. **`plugin disable <id>`** exits 0 and writes `"<id>": false` under `enabledPlugins` in user settings, even for an id that does not exist.
+5. **Synced plugins cannot be fabricated** in a throwaway config. The synced branch is therefore tested with a `claude` shim on `PATH` that adds a synced entry to `list --json` and records `disable` calls; all other commands go to the real CLI.
+6. `claude plugin validate --strict` on the fixture fails only on a missing plugin `author` warning; the fixture needs an `author` field to be strictly valid, but the tests do not validate it.
+
+### Consequences for Task 5
+
+- Cleanup order: uninstall other user-scope plugins, then remove other marketplaces, then disable synced plugins, then (last) `enable_auto_update`, so no later CLI write can disturb the `autoUpdate` flag. A test asserts `autoUpdate` survives a cleanup run.
+- A plan whose `--dry-run` flag is combined with `--no-clean` is contradictory: usage error, exit 2.
+- Skill-folder candidates are non-hidden directories (or symlinks) directly under `skills/`, excluding `synced`; loose files such as `.DS_Store` are ignored so Finder litter does not trigger a cleanup every run.
+- Order in `main`: parse flags, `require_cmd`, `check_settings`, compute the plan (read-only), `--dry-run` exits here, confirmation, `backup_settings`, add marketplace and install, `run_cleanup`, `enable_auto_update`.
