@@ -10,7 +10,6 @@ set -euo pipefail
 
 MARKETPLACE=jaffskils
 SOURCE=${JAFFSKILS_SOURCE:-jafforgehq/jaffskils}
-# shellcheck disable=SC2034  # read by the auto-update step
 AUTO_UPDATE=1
 
 die() { echo "setup.sh: $*" >&2; exit 1; }
@@ -41,6 +40,60 @@ sys.exit(1)
 ' "$MARKETPLACE"
 }
 
+settings_path() { echo "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"; }
+
+# Die unless the settings file is absent or holds a JSON object. Runs before
+# anything else so a broken file is never touched, by us or by the claude CLI.
+check_settings() {
+  [[ -e $1 ]] || return 0
+  python3 -I -c '
+import json, sys
+if not isinstance(json.load(open(sys.argv[1], encoding="utf-8")), dict):
+    raise ValueError("not a JSON object")
+' "$1" 2>/dev/null ||
+    die "$1 is not a valid JSON settings file; fix or move it, then re-run (nothing was changed)"
+}
+
+# Keep the original once: later runs must not overwrite it with edited copies.
+backup_settings() {
+  [[ -f $1 && ! -e $1.jaffskils.bak ]] || return 0
+  cp -p "$1" "$1.jaffskils.bak"
+}
+
+# The claude CLI has no auto-update command; the setting lives on the
+# marketplace's extraKnownMarketplaces entry. Writes only if something changes.
+enable_auto_update() {
+  python3 -I -c '
+import json, os, sys, tempfile
+path, name, source = sys.argv[1:4]
+try:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+except FileNotFoundError:
+    data = {}
+markets = data.setdefault("extraKnownMarketplaces", {})
+if not isinstance(markets, dict):
+    sys.exit(path + ": extraKnownMarketplaces is not an object")
+entry = markets.setdefault(name, {})
+before = json.dumps(data, sort_keys=True)
+if "source" not in entry:
+    entry["source"] = (
+        {"source": "directory", "path": os.path.abspath(source)}
+        if os.path.isdir(source)
+        else {"source": "github", "repo": source}
+    )
+entry["autoUpdate"] = True
+if json.dumps(data, sort_keys=True) == before and os.path.exists(path):
+    sys.exit(0)
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path) or ".", prefix=".settings.", suffix=".tmp")
+with os.fdopen(fd, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+if os.path.exists(path):
+    os.chmod(tmp, os.stat(path).st_mode & 0o7777)
+os.replace(tmp, path)
+' "$1" "$MARKETPLACE" "$SOURCE" || die "could not enable auto-update in $1"
+}
+
 plugin_names() {
   python3 -I -c '
 import json, sys
@@ -61,6 +114,13 @@ main() {
   require_cmd claude
   require_cmd python3
 
+  local settings
+  settings=$(settings_path)
+  if [[ $AUTO_UPDATE -eq 1 ]]; then
+    check_settings "$settings"
+    backup_settings "$settings"
+  fi
+
   if marketplace_listed; then
     echo "Marketplace '$MARKETPLACE' is already added." >&2
   else
@@ -76,6 +136,11 @@ main() {
     claude plugin install "$name@$MARKETPLACE" --scope user </dev/null ||
       die "could not install $name@$MARKETPLACE"
   done <<<"$names"
+
+  if [[ $AUTO_UPDATE -eq 1 ]]; then
+    enable_auto_update "$settings"
+    echo "Auto-update is on for '$MARKETPLACE'." >&2
+  fi
 
   echo "Installed from $MARKETPLACE: $(echo "$names" | tr '\n' ' ')" >&2
   echo "Run /reload-plugins in Claude Code, or restart it, to load them." >&2

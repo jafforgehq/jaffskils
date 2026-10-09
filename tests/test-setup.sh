@@ -83,6 +83,79 @@ case_missing_claude_fails_clearly() {
   grep -q claude "$ENV_DIR.err" || fail "stderr does not name the missing 'claude' command"
 }
 
+settings_file() { echo "$CLAUDE_CONFIG_DIR/settings.json"; }
+
+# json_get FILE KEY...: prints the JSON value at that key path, or MISSING.
+json_get() {
+  python3 -I -c '
+import json, sys
+v = json.load(open(sys.argv[1], encoding="utf-8"))
+for k in sys.argv[2:]:
+    if not isinstance(v, dict) or k not in v:
+        print("MISSING")
+        sys.exit(0)
+    v = v[k]
+print(json.dumps(v, sort_keys=True))
+' "$@"
+}
+
+case_autoupdate_enabled() {
+  run_setup
+  assert_eq "$RC" 0 "exit code"
+  assert_eq "$(json_get "$(settings_file)" extraKnownMarketplaces jaffskils autoUpdate)" true "autoUpdate"
+}
+
+# The first run leaves a settings.json; deleting it and re-running reaches the
+# path where enable_auto_update must create the file and the entry itself.
+case_autoupdate_creates_missing_settings() {
+  run_setup
+  assert_eq "$RC" 0 "first run exit code"
+  rm -f "$(settings_file)"
+  run_setup
+  assert_eq "$RC" 0 "second run exit code"
+  assert_eq "$(json_get "$(settings_file)" extraKnownMarketplaces jaffskils autoUpdate)" true "autoUpdate"
+  assert_eq "$(json_get "$(settings_file)" extraKnownMarketplaces jaffskils source source)" '"directory"' "derived source type"
+}
+
+case_settings_other_keys_preserved() {
+  local seed='{"sentinel":{"keep":1},"extraKnownMarketplaces":{"other":{"source":{"source":"github","repo":"example/other"},"autoUpdate":false}}}'
+  printf '%s' "$seed" >"$(settings_file)"
+  printf '%s' "$seed" >"$ENV_DIR.seed"
+  run_setup
+  assert_eq "$RC" 0 "exit code"
+  assert_eq "$(json_get "$(settings_file)" sentinel)" '{"keep": 1}' "sentinel key"
+  assert_eq "$(json_get "$(settings_file)" extraKnownMarketplaces other autoUpdate)" false "other marketplace"
+  assert_eq "$(json_get "$(settings_file)" extraKnownMarketplaces jaffskils autoUpdate)" true "jaffskils autoUpdate"
+  cmp -s "$(settings_file).jaffskils.bak" "$ENV_DIR.seed" || fail "backup is not the original file byte for byte"
+}
+
+case_malformed_settings_aborts_untouched() {
+  printf '%s' '{not json' >"$(settings_file)"
+  printf '%s' '{not json' >"$ENV_DIR.seed"
+  run_setup
+  assert_eq "$RC" 1 "exit code"
+  cmp -s "$(settings_file)" "$ENV_DIR.seed" || fail "settings.json was modified"
+  grep -q settings.json "$ENV_DIR.err" || fail "stderr does not name settings.json"
+  if marketplace_names 2>/dev/null | grep -qx jaffskils; then fail "marketplace was added despite the bad settings.json"; fi
+}
+
+case_autoupdate_rerun_unchanged() {
+  run_setup
+  assert_eq "$RC" 0 "first run exit code"
+  assert_eq "$(json_get "$(settings_file)" extraKnownMarketplaces jaffskils autoUpdate)" true "autoUpdate after first run"
+  cp "$(settings_file)" "$ENV_DIR.after1"
+  run_setup
+  assert_eq "$RC" 0 "second run exit code"
+  cmp -s "$(settings_file)" "$ENV_DIR.after1" || fail "settings.json changed on re-run"
+}
+
+case_no_auto_update_flag() {
+  run_setup --no-auto-update
+  assert_eq "$RC" 0 "exit code"
+  assert_eq "$(json_get "$(settings_file)" extraKnownMarketplaces jaffskils autoUpdate)" MISSING "autoUpdate"
+  [[ ! -e "$(settings_file).jaffskils.bak" ]] || fail "a backup was made although settings were not edited"
+}
+
 main() {
   RUN_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/jaffskils-tests.XXXXXX") || exit 1
   local failed=0 c rc
