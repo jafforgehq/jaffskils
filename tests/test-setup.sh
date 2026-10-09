@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Integration tests for setup.sh. Every case runs against a throwaway
-# CLAUDE_CONFIG_DIR, so the real ~/.claude is never touched. Needs network:
-# superpowers is fetched from GitHub.
+# CLAUDE_CONFIG_DIR, so the real ~/.claude is never touched. Most cases use a
+# small local marketplace (just the rtk plugin); installs_everything installs the
+# real manifest and so needs network, because upstream plugins come from GitHub.
 #
 # Usage: TMPDIR=/some/dir tests/test-setup.sh
 set -u
@@ -9,6 +10,7 @@ set -u
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SETUP="$REPO_ROOT/setup.sh"
 RUN_ROOT=""
+LITE_SOURCE=""
 ENV_DIR=""
 RC=0
 
@@ -19,7 +21,7 @@ assert_eq() { [[ $1 == "$2" ]] || fail "$3: expected '$2', got '$1'"; }
 new_env() {
   ENV_DIR=$(mktemp -d "$RUN_ROOT/jaffskils test.XXXXXX")
   export CLAUDE_CONFIG_DIR="$ENV_DIR"
-  export JAFFSKILS_SOURCE="$REPO_ROOT"
+  export JAFFSKILS_SOURCE="$LITE_SOURCE"
   [[ -n $CLAUDE_CONFIG_DIR && $CLAUDE_CONFIG_DIR != "$HOME/.claude" ]] || exit 99
 }
 
@@ -46,13 +48,34 @@ plugins_snapshot() {
     "$(installed_json)"
 }
 
+# A marketplace named jaffskils that lists only the local rtk plugin, so cases that
+# are not about the plugin list do not clone every upstream repo.
+make_lite_source() {
+  LITE_SOURCE="$RUN_ROOT/lite"
+  mkdir -p "$LITE_SOURCE/.claude-plugin" "$LITE_SOURCE/plugins"
+  cp -R "$REPO_ROOT/plugins/rtk" "$LITE_SOURCE/plugins/rtk"
+  cat >"$LITE_SOURCE/.claude-plugin/marketplace.json" <<'JSON'
+{
+  "name": "jaffskils",
+  "owner": { "name": "jafforgehq" },
+  "plugins": [{ "name": "rtk", "description": "rtk", "source": "./plugins/rtk" }]
+}
+JSON
+  git -C "$LITE_SOURCE" init -q && git -C "$LITE_SOURCE" add -A &&
+    git -C "$LITE_SOURCE" -c user.name=t -c user.email=t@t commit -q -m lite
+}
+
 case_installs_everything() {
+  export JAFFSKILS_SOURCE="$REPO_ROOT"
   run_setup
   assert_eq "$RC" 0 "exit code"
   marketplace_names | grep -qx jaffskils || fail "jaffskils is not a configured marketplace"
-  json_has_plugin superpowers@jaffskils || fail "superpowers@jaffskils is not installed"
-  json_has_plugin context7@jaffskils || fail "context7@jaffskils is not installed"
   json_has_plugin rtk@jaffskils || fail "rtk@jaffskils is not installed"
+  local name
+  for name in $(python3 -I -c 'import json,sys; print(" ".join(p["name"] for p in json.load(open(sys.argv[1]))["plugins"]))' \
+    "$REPO_ROOT/.claude-plugin/marketplace.json"); do
+    json_has_plugin "$name@jaffskils" || fail "$name@jaffskils is not installed"
+  done
 }
 
 case_rtk_hook_passes_through_without_rtk() {
@@ -61,6 +84,23 @@ case_rtk_hook_passes_through_without_rtk() {
     PATH=/nonexistent /bin/bash "$REPO_ROOT/plugins/rtk/hooks/rtk-rewrite.sh") ||
     fail "hook failed when rtk is missing"
   assert_eq "$out" "" "hook output without rtk"
+}
+
+case_rtk_hook_rewrites_when_rtk_present() {
+  command -v rtk >/dev/null && command -v jq >/dev/null || return 0
+  local out
+  out=$(echo '{"tool_input":{"command":"git status"}}' |
+    /bin/bash "$REPO_ROOT/plugins/rtk/hooks/rtk-rewrite.sh") || fail "hook failed"
+  [[ $out == *'"command":"rtk git status"'* ]] || fail "git status was not rewritten: $out"
+}
+
+case_every_upstream_plugin_is_pinned() {
+  python3 -I -c '
+import json, sys
+bad = [p["name"] for p in json.load(open(sys.argv[1]))["plugins"]
+       if isinstance(p["source"], dict) and not p["source"].get("sha")]
+sys.exit("unpinned: " + ", ".join(bad) if bad else 0)' \
+    "$REPO_ROOT/.claude-plugin/marketplace.json" || fail "an upstream plugin has no sha"
 }
 
 case_rerun_is_idempotent() {
@@ -77,7 +117,7 @@ case_runs_from_stdin() {
   RC=0
   (cd "$ENV_DIR" && bash <"$SETUP" >"$ENV_DIR.out" 2>"$ENV_DIR.err") || RC=$?
   assert_eq "$RC" 0 "exit code when the script arrives on stdin"
-  json_has_plugin superpowers@jaffskils || fail "superpowers@jaffskils is not installed"
+  json_has_plugin rtk@jaffskils || fail "rtk@jaffskils is not installed"
 }
 
 case_unknown_flag_exits_2() {
@@ -212,7 +252,7 @@ case_cleanup_removes_other_plugins_and_marketplaces() {
   assert_eq "$RC" 0 "exit code"
   if fixture_installed; then fail "fixture plugin is still installed"; fi
   if marketplace_names | grep -qx fixturemkt; then fail "fixture marketplace is still listed"; fi
-  json_has_plugin superpowers@jaffskils || fail "a jaffskils plugin was removed"
+  json_has_plugin rtk@jaffskils || fail "a jaffskils plugin was removed"
   assert_eq "$(json_get "$(settings_file)" extraKnownMarketplaces jaffskils autoUpdate)" true "autoUpdate after cleanup"
 }
 
@@ -272,7 +312,7 @@ case_no_clean_flag_skips_cleanup() {
   assert_eq "$RC" 0 "exit code"
   fixture_installed || fail "the fixture plugin was removed despite --no-clean"
   [[ -d "$CLAUDE_CONFIG_DIR/skills/alpha" ]] || fail "a skill was moved despite --no-clean"
-  json_has_plugin superpowers@jaffskils || fail "superpowers was not installed"
+  json_has_plugin rtk@jaffskils || fail "rtk was not installed"
 }
 
 case_cleanup_refused_without_terminal() {
@@ -372,6 +412,7 @@ SHIM
 main() {
   RUN_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/jaffskils-tests.XXXXXX") || exit 1
   make_fixture
+  make_lite_source
   local failed=0 c rc
   for c in $(declare -F | awk '{print $3}' | grep '^case_'); do
     [[ -z ${1:-} || $c == *"$1"* ]] || continue

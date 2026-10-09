@@ -99,10 +99,11 @@ Upstream changes reach you only when all three of these hold:
    marketplaces; `setup.sh` turns it on. By hand: `/plugin` → Marketplaces →
    jaffskils → Enable auto-update. Plugins refresh up to about ten minutes after the
    first message of a session, and a running session needs `/reload-plugins`.
-2. **The plugin is referenced, not copied.** The superpowers entry points at
-   `obra/superpowers` and tracks its default branch.
+2. **The plugin is referenced, not copied.** Each upstream entry points at its repo
+   and is pinned to a commit with `sha`, so upstream changes never reach you
+   unreviewed. To take them, run `scripts/update-pins.sh`, read the diff and commit.
 3. **The version string changes.** Upstream pins a `version` in its `plugin.json`, so
-   you receive upstream releases rather than every commit. A plugin of mine with no
+   a pin bump only matters to you when that version moves. A plugin of mine with no
    `version` is versioned by commit, so every push reaches you.
 
 ## Add my own skill
@@ -119,8 +120,9 @@ warning is expected for plugins without a `version`.
 ## Tests
 
 `tests/test-setup.sh` runs `setup.sh` against throwaway config directories, so your
-real `~/.claude` is never touched. It needs network access, because superpowers is
-fetched from GitHub:
+real `~/.claude` is never touched. Most cases use a small local marketplace; one
+installs every plugin in the real manifest, so the suite needs network access.
+GitHub Actions runs it, and `claude plugin validate .`, on every push:
 
 ```bash
 tests/test-setup.sh
