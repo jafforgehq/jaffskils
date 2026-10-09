@@ -1,0 +1,12 @@
+{
+  "name": "jaffskils",
+  "description": "Personal Claude Code skills marketplace by jafforgehq",
+  "owner": { "name": "jafforgehq" },
+  "plugins": [
+    {
+      "name": "superpowers",
+      "description": "Superpowers skills, tracked from upstream obra/superpowers",
+      "source": { "source": "github", "repo": "obra/superpowers" }
+    }
+  ]
+}
