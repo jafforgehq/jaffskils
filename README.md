@@ -7,7 +7,9 @@ A personal [Claude Code](https://claude.com/claude-code) skills marketplace by
 [humanizer](https://github.com/blader/humanizer),
 [marketing-skills](https://github.com/coreyhaines31/marketingskills),
 [caveman](https://github.com/JuliusBrussee/caveman),
-[godot-prompter](https://github.com/jame581/GodotPrompter) and
+[godot-prompter](https://github.com/jame581/GodotPrompter),
+[taste-skill](https://github.com/Leonxlnx/taste-skill),
+[designlang](https://github.com/Manavarya09/design-extract) and
 [ponytail](https://github.com/DietrichGebert/ponytail), all referenced from upstream,
 and `rtk`, my own wrapper around [rtk](https://github.com/rtk-ai/rtk). It is where my
 own skills will be added over time.
@@ -73,6 +75,10 @@ Claude desktop app supplies, and organisation-managed plugins.
 `caveman` and `ponytail` register SessionStart hooks that change how Claude answers
 in every session (terse prose, and simplest-possible code). Disable one with
 `/plugin` if you want normal output back.
+
+`designlang` is different: its slash commands run `npx designlang`, which downloads
+the latest npm package when you call one. The marketplace pin fixes the commands, not
+that package. It needs Node and runs only when you invoke a command.
 
 ## rtk
 

@@ -73,6 +73,24 @@
         "repo": "jame581/GodotPrompter",
         "sha": "1e7d79d3cbbd6fd8016cd9cc77c6a79f342ea218"
       }
+    },
+    {
+      "name": "taste-skill",
+      "description": "Frontend design taste skills (minimalist, brutalist, soft, redesign, brand kit), tracked from upstream Leonxlnx/taste-skill",
+      "source": {
+        "source": "github",
+        "repo": "Leonxlnx/taste-skill",
+        "sha": "717446e07a78d4e6d7918b1fde1a263378eebac9"
+      }
+    },
+    {
+      "name": "designlang",
+      "description": "Extracts a website's design system into tokens and reports; commands run npx designlang. Tracked from upstream Manavarya09/design-extract",
+      "source": {
+        "source": "github",
+        "repo": "Manavarya09/design-extract",
+        "sha": "23b6c1b801b1f7ba13da7f6606632f1e3e8387ac"
+      }
     }
   ]
 }
