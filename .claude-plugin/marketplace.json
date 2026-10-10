@@ -91,6 +91,11 @@
         "repo": "Manavarya09/design-extract",
         "sha": "23b6c1b801b1f7ba13da7f6606632f1e3e8387ac"
       }
+    },
+    {
+      "name": "ccusage",
+      "description": "Report Claude Code token usage and cost with ccusage; runs npx ccusage, needs Node",
+      "source": "./plugins/ccusage"
     }
   ]
 }

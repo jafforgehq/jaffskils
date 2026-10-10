@@ -11,8 +11,9 @@ A personal [Claude Code](https://claude.com/claude-code) skills marketplace by
 [taste-skill](https://github.com/Leonxlnx/taste-skill),
 [designlang](https://github.com/Manavarya09/design-extract) and
 [ponytail](https://github.com/DietrichGebert/ponytail), all referenced from upstream,
-and `rtk`, my own wrapper around [rtk](https://github.com/rtk-ai/rtk). It is where my
-own skills will be added over time.
+and two wrappers of my own: `rtk`, around [rtk](https://github.com/rtk-ai/rtk), and
+`ccusage`, around [ccusage](https://github.com/ccusage/ccusage). It is where my own
+skills will be added over time.
 
 ## Set up a machine
 
@@ -79,6 +80,16 @@ in every session (terse prose, and simplest-possible code). Disable one with
 `designlang` is different: its slash commands run `npx designlang`, which downloads
 the latest npm package when you call one. The marketplace pin fixes the commands, not
 that package. It needs Node and runs only when you invoke a command.
+
+## ccusage
+
+ccusage reports Claude Code token use and cost from the session logs already on your
+machine. It publishes no Claude Code plugin of its own, so the `ccusage` plugin here is
+a small skill of mine that teaches Claude its commands (`daily`, `monthly`, `session`,
+`blocks`, `statusline`). Like `designlang`, it runs `npx ccusage@latest`, which
+downloads the latest npm package when used; nothing is installed or pinned. It needs
+Node. The status line is not switched on for you: the skill gives the `settings.json`
+snippet and asks before editing.
 
 ## rtk
 

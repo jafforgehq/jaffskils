@@ -1,0 +1,5 @@
+{
+  "name": "ccusage",
+  "description": "Report Claude Code token usage and cost with ccusage (runs npx ccusage; needs Node)",
+  "author": { "name": "jafforgehq" }
+}
