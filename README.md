@@ -11,9 +11,10 @@ A personal [Claude Code](https://claude.com/claude-code) skills marketplace by
 [taste-skill](https://github.com/Leonxlnx/taste-skill),
 [designlang](https://github.com/Manavarya09/design-extract) and
 [ponytail](https://github.com/DietrichGebert/ponytail), all referenced from upstream,
-and two wrappers of my own: `rtk`, around [rtk](https://github.com/rtk-ai/rtk), and
-`ccusage`, around [ccusage](https://github.com/ccusage/ccusage). It is where my own
-skills will be added over time.
+and wrappers and plugins of my own: `rtk`, around [rtk](https://github.com/rtk-ai/rtk),
+`ccusage`, around [ccusage](https://github.com/ccusage/ccusage), `domain-scout`, and
+three terminal UI mods: `status-bar`, `done-toast` and `session-recap`. It is where my
+own skills will be added over time.
 
 ## Set up a machine
 
@@ -48,6 +49,8 @@ that copy.
 | `--yes` | Skip the confirmation prompt (needed when there is no terminal) |
 | `--no-clean` | Install only; leave other skills alone |
 | `--no-auto-update` | Do not touch the auto-update setting |
+| `--list` | Show every plugin the marketplace offers against what is installed; change nothing |
+| `--check` | Like `--list`, and exit 1 if a plugin is missing, disabled or no longer in the marketplace |
 
 `setup.sh` is safe to re-run. It needs `claude` and `python3` on your `PATH`.
 
@@ -99,6 +102,30 @@ small skill. The plugin does not install the binary; get it with
 `brew install rtk-ai/tap/rtk` (the hook also needs `jq`). Without them the hook
 leaves commands unchanged. Do not also run `rtk init -g`, or the hook runs twice.
 
+## domain-scout
+
+Finds, shortlists and wires up a domain name. With the Namecheap MCP connected it
+checks availability in one batch, prefers a purchase link over registering for you,
+and reads existing DNS records before saving new ones. Without it, the skill says so
+and falls back to manual mode: `whois` and `dig` for a "likely available" answer,
+registrar links, and DNS records printed as a table to paste. The plugin does not
+install or bundle the MCP; connect Namecheap yourself (a claude.ai connector, or your
+own MCP config) and start a new session. Registering a domain, saving DNS records,
+changing nameservers and saving contacts always wait for a yes.
+
+## Terminal UI mods
+
+Three small mods for Claude Code's mod system. They load like any plugin, and run on
+a build that supports mods; elsewhere `/plugin` shows them but they do nothing.
+
+| Mod | What it does |
+|---|---|
+| `status-bar` | One status line entry after each turn: session cost, git branch, model, context use (`$0.42 · main · opus · ctx 31%`) |
+| `done-toast` | A toast when a turn that took 30 seconds or more ends, or a subagent finishes |
+| `session-recap` | `/recap` prints the files changed, shell commands run, cost, context use and open TODOs |
+
+Each has a `register.test.ts`; run one with `claude plugin test plugins/<name>`.
+
 ## Install by hand
 
 ```
@@ -123,6 +150,24 @@ Upstream changes reach you only when all three of these hold:
 3. **The version string changes.** Upstream pins a `version` in its `plugin.json`, so
    a pin bump only matters to you when that version moves. A plugin of mine with no
    `version` is versioned by commit, so every push reaches you.
+
+## Maintenance scripts
+
+| Script | Use |
+|---|---|
+| `scripts/update-pins.sh` | Move every upstream pin to its repo's HEAD |
+| `scripts/pin-drift.sh` | Markdown table of how many commits each pin is behind; changes nothing |
+| `scripts/pin-changelog.sh` | After `update-pins.sh`: the upstream commits behind each pin that moved |
+| `scripts/marketplace-lint.sh [--remote]` | Fail on duplicate names, missing local plugin folders, bad `sha` values, unlisted `plugins/` folders; `--remote` also asks GitHub whether each sha exists |
+
+CI runs the lint on every push. The monthly `update-pins` job puts the changelog in
+its pull request body. The `pin-drift` workflow writes the drift table to the job
+summary every Monday, and comments it on any pull request that touches
+`marketplace.json`.
+
+`./setup.sh --check` is the multi-machine check: run it on any machine to see whether
+it has every plugin the marketplace offers. Run
+`claude plugin marketplace update jaffskils` first to compare against what is pushed.
 
 ## Add my own skill
 

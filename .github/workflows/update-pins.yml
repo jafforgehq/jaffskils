@@ -17,6 +17,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/update-pins.sh
+      - name: Write the changelog for the pull request body
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/pin-changelog.sh > "$RUNNER_TEMP/pin-changelog.md"
       - name: Open a pull request if anything changed
         env:
           GH_TOKEN: ${{ github.token }}
@@ -25,9 +29,10 @@ jobs:
           branch="update-pins-$(date +%Y-%m)"
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
+          { printf 'Monthly pin refresh. Read each commit list, then merge.\n\n'; cat "$RUNNER_TEMP/pin-changelog.md"; } > "$RUNNER_TEMP/pr-body.md"
           git checkout -b "$branch"
           git commit -am "chore: update upstream pins"
           git push --force origin "$branch"
           gh pr create --base main --head "$branch" \
             --title "chore: update upstream pins ($(date +%Y-%m))" \
-            --body "Monthly pin refresh. Read the diff, check upstream changelogs, then merge."
+            --body-file "$RUNNER_TEMP/pr-body.md"

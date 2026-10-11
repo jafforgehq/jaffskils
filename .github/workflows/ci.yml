@@ -21,5 +21,11 @@ jobs:
         run: sudo apt-get install -y jq
       - name: Validate manifest
         run: claude plugin validate .
+      - name: Lint marketplace.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/marketplace-lint.sh --remote
+      - name: Run lint tests
+        run: tests/test-lint.sh
       - name: Run tests
         run: tests/test-setup.sh

@@ -14,6 +14,8 @@
 #        --yes           skip the confirmation prompt
 #        --no-clean      install only; leave other skills alone
 #        --no-auto-update  do not touch the auto-update setting
+#        --list          show available vs installed plugins; change nothing
+#        --check         like --list, and exit 1 if this machine is out of sync
 #
 # Environment: JAFFSKILS_SOURCE (marketplace source, default jafforgehq/jaffskils),
 #              CLAUDE_CONFIG_DIR (default ~/.claude),
@@ -26,10 +28,12 @@ AUTO_UPDATE=1
 CLEAN=1
 DRY_RUN=0
 ASSUME_YES=0
+LIST=0
+CHECK=0
 
 die() { echo "setup.sh: $*" >&2; exit 1; }
 
-usage() { echo "Usage: setup.sh [--no-auto-update] [--no-clean] [--dry-run] [--yes]" >&2; }
+usage() { echo "Usage: setup.sh [--no-auto-update] [--no-clean] [--dry-run] [--yes] | --list | --check" >&2; }
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "'$1' not found on PATH"; }
 
@@ -243,6 +247,44 @@ for p in json.load(open(sys.argv[1] + "/.claude-plugin/marketplace.json"))["plug
 ' "$1"
 }
 
+# Compare what the marketplace offers with what is installed. Prints one row per
+# plugin and a verdict; returns 1 if anything is missing, disabled or stale.
+# Reads the local marketplace clone, so run `claude plugin marketplace update
+# jaffskils` first to compare against the latest pushed manifest.
+list_plugins() {
+  local dir
+  dir=$(marketplace_dir) || die "marketplace '$MARKETPLACE' is not added; run setup.sh first"
+  claude plugin list --json </dev/null |
+    python3 -I -c '
+import json, sys
+market, manifest = sys.argv[1], sys.argv[2]
+available = [p["name"] for p in json.load(open(manifest + "/.claude-plugin/marketplace.json"))["plugins"]]
+installed = {}
+for p in json.load(sys.stdin):
+    name, _, source = p["id"].rpartition("@")
+    if source == market:
+        installed[name] = p
+rows, bad = [], 0
+for name in available:
+    p = installed.get(name)
+    if p is None:
+        rows.append((name, "-", "MISSING: not installed")); bad += 1
+    elif not p.get("enabled"):
+        rows.append((name, p["version"], "DISABLED")); bad += 1
+    else:
+        rows.append((name, p["version"], "ok"))
+for name, p in installed.items():
+    if name not in available:
+        rows.append((name, p["version"], "EXTRA: installed but no longer in the marketplace")); bad += 1
+width = max(len(r[0]) for r in rows)
+for name, version, status in rows:
+    print(f"{name:<{width}}  {version:<14} {status}")
+print()
+print("in sync" if bad == 0 else f"{bad} plugin(s) out of sync; run setup.sh to fix")
+sys.exit(1 if bad else 0)
+' "$MARKETPLACE" "$dir"
+}
+
 main() {
   while [[ $# -gt 0 ]]; do
     case $1 in
@@ -250,6 +292,8 @@ main() {
       --no-clean) CLEAN=0 ;;
       --dry-run) DRY_RUN=1 ;;
       --yes) ASSUME_YES=1 ;;
+      --list) LIST=1 ;;
+      --check) LIST=1; CHECK=1 ;;
       *) usage; exit 2 ;;
     esac
     shift
@@ -262,6 +306,13 @@ main() {
 
   require_cmd claude
   require_cmd python3
+
+  if [[ $LIST -eq 1 ]]; then
+    local status=0
+    list_plugins || status=$?
+    [[ $CHECK -eq 1 ]] && exit "$status"
+    exit 0
+  fi
 
   local settings plugins="" markets="" skills="" synced="" has_cleanup=0
   settings=$(settings_path)

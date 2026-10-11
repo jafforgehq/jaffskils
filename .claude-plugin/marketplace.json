@@ -96,6 +96,26 @@
       "name": "ccusage",
       "description": "Report Claude Code token usage and cost with ccusage; runs npx ccusage, needs Node",
       "source": "./plugins/ccusage"
+    },
+    {
+      "name": "domain-scout",
+      "description": "Find, shortlist and wire up a domain name; uses the Namecheap MCP when connected, manual steps otherwise",
+      "source": "./plugins/domain-scout"
+    },
+    {
+      "name": "status-bar",
+      "description": "Status line entry with session cost, git branch, model and context use",
+      "source": "./plugins/status-bar"
+    },
+    {
+      "name": "done-toast",
+      "description": "Toast when a long turn or a subagent finishes",
+      "source": "./plugins/done-toast"
+    },
+    {
+      "name": "session-recap",
+      "description": "/recap: files changed, cost and open TODOs for this session",
+      "source": "./plugins/session-recap"
     }
   ]
 }

@@ -1,0 +1,7 @@
+{
+  "name": "status-bar",
+  "description": "One status line entry: session cost, git branch, model and context use",
+  "author": {
+    "name": "jafforgehq"
+  }
+}

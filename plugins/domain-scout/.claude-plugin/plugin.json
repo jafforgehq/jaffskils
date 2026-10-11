@@ -1,0 +1,5 @@
+{
+  "name": "domain-scout",
+  "description": "Find, shortlist and wire up a domain name; uses the Namecheap MCP when connected, manual steps otherwise",
+  "author": { "name": "jafforgehq" }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "session-recap",
+  "description": "/recap: what changed this session, what it cost, and the open TODOs",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "jafforgehq"
+  }
+}

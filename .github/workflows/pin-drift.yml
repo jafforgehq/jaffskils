@@ -1,0 +1,27 @@
+name: pin-drift
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  pull_request:
+    paths:
+      - '.claude-plugin/marketplace.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the drift report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/pin-drift.sh | tee "$RUNNER_TEMP/drift.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment the report on the pull request
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --edit-last --create-if-none --body-file "$RUNNER_TEMP/drift.md"
