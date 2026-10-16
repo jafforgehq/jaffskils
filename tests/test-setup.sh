@@ -61,6 +61,7 @@ make_lite_source() {
   "plugins": [{ "name": "rtk", "description": "rtk", "source": "./plugins/rtk" }]
 }
 JSON
+  echo '{"minimal": ["rtk", "ghost"]}' >"$LITE_SOURCE/presets.json"
   git -C "$LITE_SOURCE" init -q && git -C "$LITE_SOURCE" add -A &&
     git -C "$LITE_SOURCE" -c user.name=t -c user.email=t@t commit -q -m lite
 }
@@ -406,6 +407,61 @@ SHIM
   grep -q "Auto-update has NOT been enabled" "$ENV_DIR.err" || fail "stderr does not say auto-update is still off"
   grep -q "safe to re-run" "$ENV_DIR.err" || fail "stderr does not say re-running is safe"
   assert_eq "$(json_get "$(settings_file)" extraKnownMarketplaces jaffskils autoUpdate)" MISSING "autoUpdate after a failed cleanup"
+}
+
+case_only_installs_named_plugin() {
+  run_setup --no-clean --only rtk
+  assert_eq "$RC" 0 "exit code"
+  json_has_plugin rtk@jaffskils || fail "rtk is not installed"
+}
+
+case_only_rejects_unknown_plugin() {
+  run_setup --no-clean --only nope
+  assert_eq "$RC" 1 "exit code"
+  grep -q "unknown plugin" "$ENV_DIR.err" || fail "stderr does not name the problem"
+}
+
+case_preset_installs_members_the_marketplace_has() {
+  run_setup --no-clean --preset minimal
+  assert_eq "$RC" 0 "exit code"
+  json_has_plugin rtk@jaffskils || fail "rtk is not installed"
+}
+
+case_preset_rejects_unknown_name() {
+  run_setup --no-clean --preset nope
+  assert_eq "$RC" 1 "exit code"
+  grep -q "unknown preset" "$ENV_DIR.err" || fail "stderr does not name the problem"
+}
+
+case_selection_flags_conflict() {
+  run_setup --no-clean --pick --only rtk
+  assert_eq "$RC" 2 "exit code"
+}
+
+case_pick_reads_numbers_from_tty() {
+  echo 1 >"$ENV_DIR.tty"
+  JAFFSKILS_TTY="$ENV_DIR.tty" run_setup --no-clean --pick
+  assert_eq "$RC" 0 "exit code"
+  json_has_plugin rtk@jaffskils || fail "rtk is not installed"
+}
+
+case_pick_rejects_out_of_range() {
+  echo 9 >"$ENV_DIR.tty"
+  JAFFSKILS_TTY="$ENV_DIR.tty" run_setup --no-clean --pick
+  assert_eq "$RC" 1 "exit code"
+  grep -q "out of range" "$ENV_DIR.err" || fail "stderr does not name the problem"
+}
+
+case_update_lists_and_updates_chosen() {
+  run_setup --no-clean --only rtk
+  assert_eq "$RC" 0 "setup exit code"
+  RC=0
+  "$REPO_ROOT/scripts/update.sh" --list >"$ENV_DIR.out" 2>"$ENV_DIR.err" || RC=$?
+  assert_eq "$RC" 0 "update --list exit code"
+  grep -q "rtk" "$ENV_DIR.err" || fail "update --list does not show rtk"
+  echo 1 >"$ENV_DIR.tty"
+  JAFFSKILS_TTY="$ENV_DIR.tty" "$REPO_ROOT/scripts/update.sh" >"$ENV_DIR.out" 2>"$ENV_DIR.err" || RC=$?
+  assert_eq "$RC" 0 "update exit code"
 }
 
 # Usage: tests/test-setup.sh [substring]  (run only the cases whose name contains it)

@@ -16,10 +16,14 @@
 #        --no-auto-update  do not touch the auto-update setting
 #        --list          show available vs installed plugins; change nothing
 #        --check         like --list, and exit 1 if this machine is out of sync
+#        --pick          choose plugins interactively (numbers or a preset name)
+#        --preset NAME   install a preset from presets.json (minimal, gamedev, ...)
+#        --only a,b,c    install only these plugins
+#        Without --pick/--preset/--only every plugin is installed.
 #
 # Environment: JAFFSKILS_SOURCE (marketplace source, default jafforgehq/jaffskils),
 #              CLAUDE_CONFIG_DIR (default ~/.claude),
-#              JAFFSKILS_TTY (where the confirmation is read from, default /dev/tty).
+#              JAFFSKILS_TTY (where prompts are read from, default /dev/tty).
 set -euo pipefail
 
 MARKETPLACE=jaffskils
@@ -30,10 +34,13 @@ DRY_RUN=0
 ASSUME_YES=0
 LIST=0
 CHECK=0
+PICK=0
+PRESET=
+ONLY=
 
 die() { echo "setup.sh: $*" >&2; exit 1; }
 
-usage() { echo "Usage: setup.sh [--no-auto-update] [--no-clean] [--dry-run] [--yes] | --list | --check" >&2; }
+usage() { echo "Usage: setup.sh [--pick | --preset NAME | --only a,b] [--no-auto-update] [--no-clean] [--dry-run] [--yes] | --list | --check" >&2; }
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "'$1' not found on PATH"; }
 
@@ -247,6 +254,79 @@ for p in json.load(open(sys.argv[1] + "/.claude-plugin/marketplace.json"))["plug
 ' "$1"
 }
 
+# select_plugins DIR NAMES: print the names to install, one per line. Applies
+# --only / --preset / --pick; with none of them it prints NAMES unchanged.
+select_plugins() {
+  local dir=$1 names=$2 answer=""
+  if [[ -n $ONLY ]]; then
+    python3 -I -c '
+import sys
+names = sys.argv[1].split()
+want = [w for w in sys.argv[2].split(",") if w]
+bad = [w for w in want if w not in names]
+if bad or not want:
+    sys.exit("unknown plugin(s): " + ", ".join(bad or ["(none given)"]))
+print("\n".join(want))
+' "$names" "$ONLY"
+    return
+  fi
+  if [[ -n $PRESET ]]; then
+    preset_names "$dir" "$PRESET" "$names"
+    return
+  fi
+  if [[ $PICK -eq 1 ]]; then
+    local i=0 n
+    {
+      echo "Plugins in $MARKETPLACE:"
+      while IFS= read -r n; do
+        i=$((i + 1))
+        printf '  %2d) %s\n' "$i" "$n"
+      done <<<"$names"
+      echo "Presets: $(preset_list "$dir")"
+      printf 'Numbers (e.g. 1 3 5), a preset name, or Enter for all: '
+    } >&2
+    read -r answer 2>/dev/null <"${JAFFSKILS_TTY:-/dev/tty}" || die "no terminal to read the choice from; use --preset or --only"
+    if [[ -z $answer ]]; then echo "$names"; return; fi
+    if [[ $answer =~ ^[0-9\ ,]+$ ]]; then
+      python3 -I -c '
+import sys, re
+names = sys.argv[1].split()
+idx = [int(x) for x in re.split(r"[ ,]+", sys.argv[2].strip()) if x]
+if not idx or any(i < 1 or i > len(names) for i in idx):
+    sys.exit("choice out of range 1-%d" % len(names))
+print("\n".join(dict.fromkeys(names[i - 1] for i in idx)))
+' "$names" "$answer"
+      return
+    fi
+    preset_names "$dir" "$answer" "$names"
+    return
+  fi
+  echo "$names"
+}
+
+preset_list() {
+  python3 -I -c '
+import json, os, sys
+f = sys.argv[1] + "/presets.json"
+print(", ".join(["all"] + (list(json.load(open(f))) if os.path.exists(f) else [])))
+' "$1"
+}
+
+# preset_names DIR PRESET NAMES: members of the preset that the marketplace has.
+preset_names() {
+  python3 -I -c '
+import json, os, sys
+d, preset, names = sys.argv[1], sys.argv[2], sys.argv[3].split()
+if preset == "all":
+    print("\n".join(names)); sys.exit(0)
+f = d + "/presets.json"
+presets = json.load(open(f)) if os.path.exists(f) else {}
+if preset not in presets:
+    sys.exit("unknown preset '"'"'%s'"'"'; have: all, %s" % (preset, ", ".join(presets)))
+print("\n".join(n for n in presets[preset] if n in names))
+' "$1" "$2" "$3"
+}
+
 # Compare what the marketplace offers with what is installed. Prints one row per
 # plugin and a verdict; returns 1 if anything is missing, disabled or stale.
 # Reads the local marketplace clone, so run `claude plugin marketplace update
@@ -294,10 +374,21 @@ main() {
       --yes) ASSUME_YES=1 ;;
       --list) LIST=1 ;;
       --check) LIST=1; CHECK=1 ;;
+      --pick) PICK=1 ;;
+      --preset) [[ $# -ge 2 ]] || { usage; exit 2; }; PRESET=$2; shift ;;
+      --only) [[ $# -ge 2 ]] || { usage; exit 2; }; ONLY=$2; shift ;;
       *) usage; exit 2 ;;
     esac
     shift
   done
+  local chosen=$PICK
+  [[ -z $PRESET ]] || chosen=$((chosen + 1))
+  [[ -z $ONLY ]] || chosen=$((chosen + 1))
+  if [[ $chosen -gt 1 ]]; then
+    echo "setup.sh: use only one of --pick, --preset, --only" >&2
+    usage
+    exit 2
+  fi
   if [[ $DRY_RUN -eq 1 && $CLEAN -eq 0 ]]; then
     echo "setup.sh: --dry-run and --no-clean cannot be combined" >&2
     usage
@@ -355,6 +446,8 @@ main() {
   local dir names name
   dir=$(marketplace_dir) || die "marketplace '$MARKETPLACE' not found after adding it"
   names=$(plugin_names "$dir") || die "could not read the plugin list in $dir"
+  names=$(select_plugins "$dir" "$names") || die "could not choose plugins"
+  [[ -n $names ]] || die "no plugins selected"
 
   while IFS= read -r name; do
     [[ -n $name ]] || continue

@@ -51,6 +51,12 @@ that copy.
 | `--no-auto-update` | Do not touch the auto-update setting |
 | `--list` | Show every plugin the marketplace offers against what is installed; change nothing |
 | `--check` | Like `--list`, and exit 1 if a plugin is missing, disabled or no longer in the marketplace |
+| `--pick` | Choose plugins interactively: numbers, a preset name, or Enter for all |
+| `--preset NAME` | Install a preset from `presets.json` (`minimal`, `gamedev`, `marketing`, `design`, or `all`) |
+| `--only a,b,c` | Install only these plugins |
+
+`--pick`, `--preset` and `--only` are mutually exclusive. Without them every plugin
+is installed. Plugins you leave out are not uninstalled if already present.
 
 `setup.sh` is safe to re-run. It needs `claude` and `python3` on your `PATH`.
 
@@ -155,6 +161,8 @@ Upstream changes reach you only when all three of these hold:
 
 | Script | Use |
 |---|---|
+| `scripts/update.sh [--all \| --list]` | Refresh the marketplace, show installed plugins, update the ones you pick (or all) |
+| `scripts/doctor.sh` | Check tools (`claude`, `python3`, `uvx`, `rtk`...), plugin sync, MCP server health and the Blender port; changes nothing |
 | `scripts/update-pins.sh` | Move every upstream pin to its repo's HEAD |
 | `scripts/pin-drift.sh` | Markdown table of how many commits each pin is behind; changes nothing |
 | `scripts/pin-changelog.sh` | After `update-pins.sh`: the upstream commits behind each pin that moved |
