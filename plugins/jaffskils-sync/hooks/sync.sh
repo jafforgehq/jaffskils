@@ -10,6 +10,14 @@ STATE=${CLAUDE_PLUGIN_DATA:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jaffskils-sync}
 command -v claude >/dev/null && command -v python3 >/dev/null || exit 0
 mkdir -p "$STATE" || exit 0
 
+# At most one sync an hour, one session at a time. A lock older than 10 minutes
+# is left over from a hook that was killed.
+age() { python3 -I -c 'import os, sys, time; print(int(time.time() - os.stat(sys.argv[1]).st_mtime))' "$1" 2>/dev/null; }
+if a=$(age "$STATE/last-sync") && ((a < 3600)); then exit 0; fi
+if a=$(age "$STATE/lock") && ((a >= 600)); then rmdir "$STATE/lock" 2>/dev/null; fi
+mkdir "$STATE/lock" 2>/dev/null || exit 0
+trap 'rmdir "$STATE/lock" 2>/dev/null' EXIT
+
 # Offline or marketplace not added: stay quiet, and retry next session.
 claude plugin marketplace update "$MARKETPLACE" </dev/null >/dev/null 2>&1 || exit 0
 touch "$STATE/last-sync"
@@ -44,11 +52,15 @@ try:
 except (OSError, ValueError, KeyError, StopIteration, subprocess.CalledProcessError):
     sys.exit(0)
 
-if not os.path.exists(seen_file):
+# Missing (first run) or unreadable (hook killed mid-write): record, install nothing.
+try:
+    with open(seen_file) as f:
+        seen = json.load(f)
+    if not isinstance(seen, list):
+        raise ValueError
+except (OSError, ValueError):
     write_seen(names)
     sys.exit(0)
-with open(seen_file) as f:
-    seen = json.load(f)
 
 done, failed = [], []
 for name in names:

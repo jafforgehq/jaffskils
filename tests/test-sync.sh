@@ -107,6 +107,57 @@ case_new_plugin_already_installed_is_silent() {
   seen_names | grep -qx gamma || fail "gamma not in seen.json"
 }
 
+case_second_run_within_hour_does_nothing() {
+  run_sync; add_plugin gamma; : >"$CLAUDE_SHIM_LOG"
+  run_sync
+  assert_eq "$RC" 0 "exit code"; assert_eq "$OUT" "" "stdout"
+  ! is_installed gamma || fail "gamma installed within the hour"
+  ! grep -q "marketplace update" "$CLAUDE_SHIM_LOG" || fail "marketplace refreshed within the hour"
+}
+
+case_failed_install_reported_and_retried() {
+  run_sync; add_plugin gamma; rm "$STATE/last-sync"
+  CLAUDE_SHIM_FAIL="plugin install gamma@jaffskils" run_sync
+  assert_eq "$RC" 0 "exit code"
+  assert_eq "$(message)" "jaffskils: could not install gamma; run setup.sh --check." "message"
+  ! seen_names | grep -qx gamma || fail "failed gamma marked seen"
+  rm "$STATE/last-sync"; run_sync
+  is_installed gamma || fail "gamma not retried"
+}
+
+case_held_lock_exits_silently() {
+  run_sync; add_plugin gamma; rm "$STATE/last-sync"; mkdir "$STATE/lock"
+  run_sync
+  assert_eq "$RC" 0 "exit code"; assert_eq "$OUT" "" "stdout"
+  ! is_installed gamma || fail "installed while locked"
+}
+
+case_stale_lock_is_removed() {
+  run_sync; add_plugin gamma; rm "$STATE/last-sync"; mkdir "$STATE/lock"
+  python3 -I -c 'import os,sys,time; t=time.time()-660; os.utime(sys.argv[1],(t,t))' "$STATE/lock"
+  run_sync
+  is_installed gamma || fail "stale lock blocked the sync"
+  [[ ! -d $STATE/lock ]] || fail "lock not released"
+}
+
+case_refresh_failure_is_silent_and_retried() {
+  CLAUDE_SHIM_FAIL="plugin marketplace update jaffskils" run_sync
+  assert_eq "$RC" 0 "exit code"; assert_eq "$OUT" "" "stdout"
+  [[ ! -e $STATE/last-sync ]] || fail "last-sync written after a failed refresh"
+}
+
+case_missing_claude_exits_silently() {
+  RC=0; OUT=$(PATH=/usr/bin:/bin /bin/bash "$SYNC" </dev/null) || RC=$?
+  assert_eq "$RC" 0 "exit code"; assert_eq "$OUT" "" "stdout"
+}
+
+case_corrupt_seen_reseeds() {
+  run_sync; printf '["alp' >"$STATE/seen.json"; add_plugin gamma; rm "$STATE/last-sync"
+  run_sync
+  assert_eq "$RC" 0 "exit code"; assert_eq "$OUT" "" "stdout"
+  assert_eq "$(seen_names)" $'alpha\nbeta\ngamma' "re-seeded seen.json"
+}
+
 main() {
   export REAL_CLAUDE
   REAL_CLAUDE=$(command -v claude) || { echo "claude not found on PATH" >&2; exit 1; }
