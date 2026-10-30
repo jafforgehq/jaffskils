@@ -18,9 +18,18 @@ if a=$(age "$STATE/lock") && ((a >= 600)); then rmdir "$STATE/lock" 2>/dev/null;
 mkdir "$STATE/lock" 2>/dev/null || exit 0
 trap 'rmdir "$STATE/lock" 2>/dev/null' EXIT
 
-# Offline or marketplace not added: stay quiet, and retry next session.
-claude plugin marketplace update "$MARKETPLACE" </dev/null >/dev/null 2>&1 || exit 0
+# Stamp before the refresh, so a failing or hanging network costs one attempt an
+# hour. The CLI has no timeout of its own; 20 s keeps the hook inside its 30 s.
 touch "$STATE/last-sync"
+python3 -I -c '
+import subprocess, sys
+try:
+    sys.exit(subprocess.run(["claude", "plugin", "marketplace", "update", sys.argv[1]],
+                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL, timeout=20).returncode)
+except subprocess.TimeoutExpired:
+    sys.exit(1)
+' "$MARKETPLACE" 2>/dev/null || exit 0
 
 STATE=$STATE MARKETPLACE=$MARKETPLACE python3 -I - <<'PY'
 import json, os, subprocess, sys

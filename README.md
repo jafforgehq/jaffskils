@@ -148,8 +148,9 @@ Installs plugins that were added to this marketplace after a machine was set up,
 
 Its first run only records what the marketplace lists and installs nothing, so a
 plugin you skipped with `--pick`, `--only` or `--preset`, or uninstalled later, stays
-gone. It never uninstalls, disables or enables anything. Offline, it stays quiet and
-tries again next session; a failed install is named in the message and retried.
+gone. It never uninstalls, disables or enables anything. If the refresh fails or takes
+over 20 seconds (offline, a captive portal), it stays quiet and tries again an hour
+later; a failed install is named in the message and retried.
 
 State lives in the plugin's data folder (or `~/.claude/jaffskils-sync/` when Claude
 Code does not provide one): `seen.json` holds the names already handled. To stop it,
@@ -186,7 +187,7 @@ Upstream changes reach you only when all three of these hold:
 
 All of this covers plugins you already have. Auto-update and `scripts/update.sh` never
 install a plugin newly added to `marketplace.json`; [jaffskils-sync](#jaffskils-sync)
-does, at the next session start. Without it, re-run `setup.sh` or run
+does, at a session start within the hour. Without it, re-run `setup.sh` or run
 `/plugin install <name>@jaffskils` on each machine.
 
 ## Maintenance scripts
@@ -216,8 +217,8 @@ and re-run `setup.sh` to install any plugin it reports missing.
    `plugins/<name>/skills/<skill>/SKILL.md`.
 2. Add an entry to `.claude-plugin/marketplace.json` with
    `"source": "./plugins/<name>"` and no `version`.
-3. Push. `jaffskils-sync` installs it on each machine at the next session start, and
-   with auto-update on, every later push to it reaches my machines.
+3. Push. `jaffskils-sync` installs it on each machine at a session start within the
+   hour, and with auto-update on, every later push to it reaches my machines.
 
 Check the manifest with `claude plugin validate .`. A "no version specified"
 warning is expected for plugins without a `version`.

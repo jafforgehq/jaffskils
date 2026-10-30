@@ -140,10 +140,20 @@ case_stale_lock_is_removed() {
   [[ ! -d $STATE/lock ]] || fail "lock not released"
 }
 
-case_refresh_failure_is_silent_and_retried() {
+case_refresh_failure_is_silent_and_waits_an_hour() {
   CLAUDE_SHIM_FAIL="plugin marketplace update jaffskils" run_sync
   assert_eq "$RC" 0 "exit code"; assert_eq "$OUT" "" "stdout"
-  [[ ! -e $STATE/last-sync ]] || fail "last-sync written after a failed refresh"
+  : >"$CLAUDE_SHIM_LOG"
+  run_sync
+  ! grep -q "marketplace update" "$CLAUDE_SHIM_LOG" || fail "failed refresh retried within the hour"
+}
+
+# A network that drops packets must not run into the 30 s hook timeout.
+case_slow_refresh_gives_up_quietly() {
+  local start=$SECONDS
+  CLAUDE_SHIM_HANG="plugin marketplace update jaffskils" run_sync
+  assert_eq "$RC" 0 "exit code"; assert_eq "$OUT" "" "stdout"
+  ((SECONDS - start < 28)) || fail "refresh took $((SECONDS - start))s"
 }
 
 case_missing_claude_exits_silently() {

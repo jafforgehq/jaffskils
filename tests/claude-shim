@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# Test stand-in for `claude`: logs each call to $CLAUDE_SHIM_LOG, fails the call
-# whose arguments equal $CLAUDE_SHIM_FAIL, and passes everything else to
-# $REAL_CLAUDE. Tests put a `claude` symlink to this file first on PATH.
+# Test stand-in for `claude`: logs each call to $CLAUDE_SHIM_LOG, hangs for 60 s
+# on the call whose arguments equal $CLAUDE_SHIM_HANG, fails the call whose
+# arguments equal $CLAUDE_SHIM_FAIL, and passes everything else to $REAL_CLAUDE.
+# Tests put a `claude` symlink to this file first on PATH.
 if [[ -n ${CLAUDE_SHIM_LOG:-} ]]; then
   echo "$*" >>"$CLAUDE_SHIM_LOG"
+fi
+if [[ -n ${CLAUDE_SHIM_HANG:-} && "$*" == "$CLAUDE_SHIM_HANG" ]]; then
+  sleep 60
 fi
 if [[ -n ${CLAUDE_SHIM_FAIL:-} && "$*" == "$CLAUDE_SHIM_FAIL" ]]; then
   echo "shim: forced failure" >&2

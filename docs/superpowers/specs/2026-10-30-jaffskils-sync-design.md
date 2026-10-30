@@ -60,9 +60,10 @@ checks which one is available. Contents:
 1. Exit 0 silently when `claude` or `python3` is missing, when `last-sync` is less
    than an hour old, or when `mkdir lock` fails. A lock older than 10 minutes is
    treated as stale and removed. The lock is released on exit (`trap`).
-2. `claude plugin marketplace update jaffskils`. On failure (offline, marketplace not
-   added): exit 0 silently, leave `last-sync` untouched so the next session retries.
-3. Touch `last-sync`.
+2. Touch `last-sync`, before the refresh, so a failing or hanging network costs one
+   attempt an hour (changed after final review; it first said "retry next session").
+3. `claude plugin marketplace update jaffskils`, capped at 20 s. On failure or timeout
+   (offline, captive portal, marketplace not added): exit 0 silently.
 4. Read plugin names from the marketplace clone's `.claude-plugin/marketplace.json`.
    The clone is found the same way `setup.sh`'s `marketplace_dir` finds it.
 5. No `seen.json`: write the current names to it and exit 0.
