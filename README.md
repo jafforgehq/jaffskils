@@ -87,9 +87,12 @@ Claude desktop app supplies, and organisation-managed plugins.
 
 ## Behaviour-changing plugins
 
-`caveman` and `ponytail` register SessionStart hooks that change how Claude answers
-in every session (terse prose, and simplest-possible code). Disable one with
-`/plugin` if you want normal output back.
+`caveman`, `ponytail` and `superpowers` register SessionStart hooks that change how
+Claude works in every session: terse prose, simplest-possible code, and checking for
+a matching skill before acting. caveman and ponytail run their hooks with Node;
+without `node` on your `PATH` their modes do not load. Disable one with `/plugin` if
+you want the default behaviour back. `godot-prompter` has a SessionStart hook too,
+but it acts only inside a Godot project.
 
 `designlang` is different: its slash commands run `npx designlang`, which downloads
 the latest npm package when you call one. The marketplace pin fixes the commands, not
@@ -184,9 +187,10 @@ Upstream changes reach you only when all three of these hold:
    `main` only if it passes. The tests check that each plugin installs, not what its
    new code does, so upstream changes reach you unread. To move pins by hand, run
    `scripts/update-pins.sh`, read the diff and commit.
-3. **The version string changes.** Upstream pins a `version` in its `plugin.json`, so
-   a pin bump only matters to you when that version moves. A plugin of mine with no
-   `version` is versioned by commit, so every push reaches you.
+3. **The version string changes.** Most upstream plugins set a `version` in their
+   `plugin.json`, so a pin bump only reaches you when that version moves; until
+   then you keep the old copy. A plugin with no `version` (`taste-skill`, and every
+   plugin of mine) is versioned by commit, so every pin bump or push reaches you.
 
 All of this covers plugins you already have. Auto-update and `scripts/update.sh` never
 install a plugin newly added to `marketplace.json`; [jaffskils-sync](#jaffskils-sync)
@@ -232,10 +236,17 @@ warning is expected for plugins without a `version`.
 `tests/test-setup.sh` runs `setup.sh` against throwaway config directories, so your
 real `~/.claude` is never touched. Most cases use a small local marketplace; one
 installs every plugin in the real manifest, so the suite needs network access.
-`tests/test-sync.sh` does the same for the `jaffskils-sync` hook, offline. GitHub
-Actions runs both, and `claude plugin validate .`, on every push:
+`tests/test-sync.sh` does the same for the `jaffskils-sync` hook, offline.
+`tests/test-lint.sh` checks, offline and on a copy of the repo, that
+`scripts/marketplace-lint.sh` reports each kind of broken manifest. GitHub Actions
+runs all three, plus `claude plugin validate .` and `scripts/marketplace-lint.sh
+--remote`, on every push to `main` and every pull request; the weekly `update-pins`
+job runs the same checks before it commits new pins:
 
 ```bash
 tests/test-setup.sh
 tests/test-sync.sh
+tests/test-lint.sh
 ```
+
+The UI mods' tests (`claude plugin test plugins/<name>`) are not run in CI.

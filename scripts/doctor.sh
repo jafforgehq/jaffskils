@@ -18,7 +18,7 @@ need git
 want gh "pin-drift and update-pins need it"
 want uvx "Blender MCP runs through it"
 want rtk "the rtk plugin does nothing without it: brew install rtk-ai/tap/rtk"
-want node "npx-based MCP servers need it"
+want node "caveman, ponytail, designlang, ccusage and npx-based MCP servers need it"
 
 if command -v claude >/dev/null 2>&1; then
   echo "Marketplace"
