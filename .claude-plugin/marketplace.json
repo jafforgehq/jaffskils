@@ -143,6 +143,11 @@
       "name": "session-recap",
       "description": "/recap: files changed, cost and open TODOs for this session",
       "source": "./plugins/session-recap"
+    },
+    {
+      "name": "jaffskils-sync",
+      "description": "Installs plugins newly added to this marketplace at session start; skipped plugins stay skipped",
+      "source": "./plugins/jaffskils-sync"
     }
   ]
 }

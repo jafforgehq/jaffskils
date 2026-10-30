@@ -29,3 +29,5 @@ jobs:
         run: tests/test-lint.sh
       - name: Run tests
         run: tests/test-setup.sh
+      - name: Run sync tests
+        run: tests/test-sync.sh

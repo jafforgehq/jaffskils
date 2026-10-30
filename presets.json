@@ -1,6 +1,6 @@
 {
-  "minimal": ["superpowers", "context7", "rtk", "caveman", "ponytail"],
-  "gamedev": ["superpowers", "context7", "rtk", "caveman", "ponytail", "godot-prompter", "status-bar", "done-toast", "session-recap"],
-  "marketing": ["superpowers", "context7", "rtk", "caveman", "ponytail", "marketing-skills", "humanizer", "domain-scout"],
-  "design": ["superpowers", "context7", "rtk", "caveman", "ponytail", "taste-skill", "designlang", "humanizer"]
+  "minimal": ["superpowers", "context7", "rtk", "caveman", "ponytail", "jaffskils-sync"],
+  "gamedev": ["superpowers", "context7", "rtk", "caveman", "ponytail", "godot-prompter", "status-bar", "done-toast", "session-recap", "jaffskils-sync"],
+  "marketing": ["superpowers", "context7", "rtk", "caveman", "ponytail", "marketing-skills", "humanizer", "domain-scout", "jaffskils-sync"],
+  "design": ["superpowers", "context7", "rtk", "caveman", "ponytail", "taste-skill", "designlang", "humanizer", "jaffskils-sync"]
 }

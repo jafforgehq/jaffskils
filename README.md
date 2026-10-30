@@ -15,9 +15,10 @@ A personal [Claude Code](https://claude.com/claude-code) skills marketplace by
 [swift-concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill) and
 [ponytail](https://github.com/DietrichGebert/ponytail), all referenced from upstream,
 and wrappers and plugins of my own: `rtk`, around [rtk](https://github.com/rtk-ai/rtk),
-`ccusage`, around [ccusage](https://github.com/ccusage/ccusage), `domain-scout`, and
-three terminal UI mods: `status-bar`, `done-toast` and `session-recap`. It is where my
-own skills will be added over time.
+`ccusage`, around [ccusage](https://github.com/ccusage/ccusage), `domain-scout`,
+`jaffskils-sync`, which installs newly added plugins on its own, and three terminal UI
+mods: `status-bar`, `done-toast` and `session-recap`. It is where my own skills will be
+added over time.
 
 ## Set up a machine
 
@@ -61,7 +62,8 @@ that copy.
 `--pick`, `--preset` and `--only` are mutually exclusive. Without them every plugin
 is installed. Plugins you leave out are not uninstalled if already present.
 
-`setup.sh` is safe to re-run. It needs `claude` and `python3` on your `PATH`.
+`setup.sh` is safe to re-run, and a re-run refreshes the marketplace first, so it sees
+what was pushed. It needs `claude` and `python3` on your `PATH`.
 
 ## Exclusive mode
 
@@ -135,6 +137,28 @@ a build that supports mods; elsewhere `/plugin` shows them but they do nothing.
 
 Each has a `register.test.ts`; run one with `claude plugin test plugins/<name>`.
 
+## jaffskils-sync
+
+Installs plugins that were added to this marketplace after a machine was set up, so
+`setup.sh` is a one-time step. A SessionStart hook, at most once an hour:
+
+1. refreshes the marketplace (`claude plugin marketplace update jaffskils`);
+2. installs every plugin that is new since its last run;
+3. shows `jaffskils: installed <names>. Run /reload-plugins to load them.`
+
+Its first run only records what the marketplace lists and installs nothing, so a
+plugin you skipped with `--pick`, `--only` or `--preset`, or uninstalled later, stays
+gone. It never uninstalls, disables or enables anything. Offline, it stays quiet and
+tries again next session; a failed install is named in the message and retried.
+
+State lives in the plugin's data folder (or `~/.claude/jaffskils-sync/` when Claude
+Code does not provide one): `seen.json` holds the names already handled. To stop it,
+disable `jaffskils-sync` with `/plugin`.
+
+Limits: a machine set up before `jaffskils-sync` existed needs one more `setup.sh` run
+to get it. A machine set up from a preset also receives later plugins outside that
+preset. Needs `claude` and `python3`.
+
 ## Install by hand
 
 ```
@@ -160,10 +184,10 @@ Upstream changes reach you only when all three of these hold:
    a pin bump only matters to you when that version moves. A plugin of mine with no
    `version` is versioned by commit, so every push reaches you.
 
-All of this covers plugins you already have. A plugin newly added to
-`marketplace.json` is not installed by auto-update or `scripts/update.sh`: re-run
-`setup.sh` (it is safe to re-run), or `/plugin install <name>@jaffskils`, on each
-machine.
+All of this covers plugins you already have. Auto-update and `scripts/update.sh` never
+install a plugin newly added to `marketplace.json`; [jaffskils-sync](#jaffskils-sync)
+does, at the next session start. Without it, re-run `setup.sh` or run
+`/plugin install <name>@jaffskils` on each machine.
 
 ## Maintenance scripts
 
@@ -192,8 +216,8 @@ and re-run `setup.sh` to install any plugin it reports missing.
    `plugins/<name>/skills/<skill>/SKILL.md`.
 2. Add an entry to `.claude-plugin/marketplace.json` with
    `"source": "./plugins/<name>"` and no `version`.
-3. Push, then re-run `setup.sh` on each machine to install it. After that, with
-   auto-update on, every later push to it reaches my machines.
+3. Push. `jaffskils-sync` installs it on each machine at the next session start, and
+   with auto-update on, every later push to it reaches my machines.
 
 Check the manifest with `claude plugin validate .`. A "no version specified"
 warning is expected for plugins without a `version`.
@@ -203,8 +227,10 @@ warning is expected for plugins without a `version`.
 `tests/test-setup.sh` runs `setup.sh` against throwaway config directories, so your
 real `~/.claude` is never touched. Most cases use a small local marketplace; one
 installs every plugin in the real manifest, so the suite needs network access.
-GitHub Actions runs it, and `claude plugin validate .`, on every push:
+`tests/test-sync.sh` does the same for the `jaffskils-sync` hook, offline. GitHub
+Actions runs both, and `claude plugin validate .`, on every push:
 
 ```bash
 tests/test-setup.sh
+tests/test-sync.sh
 ```
