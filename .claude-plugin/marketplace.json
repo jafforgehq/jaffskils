@@ -11,7 +11,7 @@
       "source": {
         "source": "github",
         "repo": "obra/superpowers",
-        "sha": "8ca22dba9a94f28898bbce59f2537ff4d87c747d"
+        "sha": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b"
       }
     },
     {
@@ -21,7 +21,7 @@
         "source": "git-subdir",
         "url": "https://github.com/upstash/context7.git",
         "path": "plugins/claude/context7",
-        "sha": "522c4db4fa2e1e31f1b320f09fa8c8fab376987a"
+        "sha": "8a0289e4c5e28684b7c4ced5353af2893d1329f9"
       }
     },
     {
@@ -35,7 +35,7 @@
       "source": {
         "source": "github",
         "repo": "blader/humanizer",
-        "sha": "225a6f39ac85f76ee48dbad772ea4abe4ed6c9d8"
+        "sha": "0ef9fe5bc3572734fd3ae6c448fe00a30cd5dcf0"
       }
     },
     {
@@ -44,7 +44,7 @@
       "source": {
         "source": "github",
         "repo": "coreyhaines31/marketingskills",
-        "sha": "1efedbc5148b54b2f0f6c6c9fe0be62e151c7fff"
+        "sha": "820ad2c1c0ac4cc350158bd7912c753681a7d173"
       }
     },
     {
@@ -53,7 +53,7 @@
       "source": {
         "source": "github",
         "repo": "JuliusBrussee/caveman",
-        "sha": "2e08b9177c07bb7249a8a2d1a6758e5db281d002"
+        "sha": "9b68f7ed12b05e7efaff18e65c5a3fc2849fd0a4"
       }
     },
     {
@@ -62,7 +62,7 @@
       "source": {
         "source": "github",
         "repo": "DietrichGebert/ponytail",
-        "sha": "9cc65d03aa2da1db7121b912d03596409ee340b8"
+        "sha": "96608e078b2d5ea607c5c3b8b5a54d1c1fba6846"
       }
     },
     {
@@ -71,7 +71,7 @@
       "source": {
         "source": "github",
         "repo": "jame581/GodotPrompter",
-        "sha": "1e7d79d3cbbd6fd8016cd9cc77c6a79f342ea218"
+        "sha": "d7b26cdb5fae14d4ef7b713c5bf259395e75c3c6"
       }
     },
     {
@@ -80,7 +80,7 @@
       "source": {
         "source": "github",
         "repo": "Leonxlnx/taste-skill",
-        "sha": "717446e07a78d4e6d7918b1fde1a263378eebac9"
+        "sha": "12af471f627f866411b4bd785b19646d3672784c"
       }
     },
     {
@@ -89,7 +89,7 @@
       "source": {
         "source": "github",
         "repo": "Manavarya09/design-extract",
-        "sha": "23b6c1b801b1f7ba13da7f6606632f1e3e8387ac"
+        "sha": "d2c28da8aae3098a7f7dc02fb4355f3f803edb6c"
       }
     },
     {
