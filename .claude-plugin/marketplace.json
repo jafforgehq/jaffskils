@@ -93,6 +93,33 @@
       }
     },
     {
+      "name": "android-skills",
+      "description": "Google's official Android skills (Compose, Navigation 3, AGP, Play, Wear, XR), tracked from upstream android/skills",
+      "source": {
+        "source": "github",
+        "repo": "android/skills",
+        "sha": "6daa53ef27fa2aa87827d183a85c06cedceca833"
+      }
+    },
+    {
+      "name": "swiftui-pro",
+      "description": "Reviews SwiftUI code for modern APIs, maintainability and performance, tracked from upstream twostraws/SwiftUI-Agent-Skill",
+      "source": {
+        "source": "github",
+        "repo": "twostraws/SwiftUI-Agent-Skill",
+        "sha": "f2920b63995263f57b3e198674e89a602efba6d2"
+      }
+    },
+    {
+      "name": "swift-concurrency",
+      "description": "Swift 6 concurrency guidance (async/await, actors, tasks, Sendable), tracked from upstream AvdLee/Swift-Concurrency-Agent-Skill",
+      "source": {
+        "source": "github",
+        "repo": "AvdLee/Swift-Concurrency-Agent-Skill",
+        "sha": "d5770817d2622e1585b1f7eaebc791a9cb0959c8"
+      }
+    },
+    {
       "name": "ccusage",
       "description": "Report Claude Code token usage and cost with ccusage; runs npx ccusage, needs Node",
       "source": "./plugins/ccusage"

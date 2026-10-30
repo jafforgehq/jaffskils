@@ -9,7 +9,10 @@ A personal [Claude Code](https://claude.com/claude-code) skills marketplace by
 [caveman](https://github.com/JuliusBrussee/caveman),
 [godot-prompter](https://github.com/jame581/GodotPrompter),
 [taste-skill](https://github.com/Leonxlnx/taste-skill),
-[designlang](https://github.com/Manavarya09/design-extract) and
+[designlang](https://github.com/Manavarya09/design-extract),
+[android-skills](https://github.com/android/skills),
+[swiftui-pro](https://github.com/twostraws/SwiftUI-Agent-Skill),
+[swift-concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill) and
 [ponytail](https://github.com/DietrichGebert/ponytail), all referenced from upstream,
 and wrappers and plugins of my own: `rtk`, around [rtk](https://github.com/rtk-ai/rtk),
 `ccusage`, around [ccusage](https://github.com/ccusage/ccusage), `domain-scout`, and
@@ -157,6 +160,11 @@ Upstream changes reach you only when all three of these hold:
    a pin bump only matters to you when that version moves. A plugin of mine with no
    `version` is versioned by commit, so every push reaches you.
 
+All of this covers plugins you already have. A plugin newly added to
+`marketplace.json` is not installed by auto-update or `scripts/update.sh`: re-run
+`setup.sh` (it is safe to re-run), or `/plugin install <name>@jaffskils`, on each
+machine.
+
 ## Maintenance scripts
 
 | Script | Use |
@@ -175,7 +183,8 @@ summary every Monday, and comments it on any pull request that touches
 
 `./setup.sh --check` is the multi-machine check: run it on any machine to see whether
 it has every plugin the marketplace offers. Run
-`claude plugin marketplace update jaffskils` first to compare against what is pushed.
+`claude plugin marketplace update jaffskils` first to compare against what is pushed,
+and re-run `setup.sh` to install any plugin it reports missing.
 
 ## Add my own skill
 
@@ -183,7 +192,8 @@ it has every plugin the marketplace offers. Run
    `plugins/<name>/skills/<skill>/SKILL.md`.
 2. Add an entry to `.claude-plugin/marketplace.json` with
    `"source": "./plugins/<name>"` and no `version`.
-3. Push. With auto-update on, the change reaches my machines.
+3. Push, then re-run `setup.sh` on each machine to install it. After that, with
+   auto-update on, every later push to it reaches my machines.
 
 Check the manifest with `claude plugin validate .`. A "no version specified"
 warning is expected for plugins without a `version`.
