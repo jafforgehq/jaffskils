@@ -43,6 +43,6 @@ for plugin in new:
 if count == 0:
     print("No pins changed.")
 else:
-    print(f"Pins changed: {count}. Read each list below before merging.\n")
+    print(f"Pins changed: {count}.\n")
     print("\n".join(out))
 PY

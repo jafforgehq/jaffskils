@@ -179,8 +179,11 @@ Upstream changes reach you only when all three of these hold:
    jaffskils → Enable auto-update. Plugins refresh up to about ten minutes after the
    first message of a session, and a running session needs `/reload-plugins`.
 2. **The plugin is referenced, not copied.** Each upstream entry points at its repo
-   and is pinned to a commit with `sha`, so upstream changes never reach you
-   unreviewed. To take them, run `scripts/update-pins.sh`, read the diff and commit.
+   and is pinned to a commit with `sha`. Every Monday the `update-pins` job moves
+   each pin to its repo's latest commit, runs the full test suite, and commits to
+   `main` only if it passes. The tests check that each plugin installs, not what its
+   new code does, so upstream changes reach you unread. To move pins by hand, run
+   `scripts/update-pins.sh`, read the diff and commit.
 3. **The version string changes.** Upstream pins a `version` in its `plugin.json`, so
    a pin bump only matters to you when that version moves. A plugin of mine with no
    `version` is versioned by commit, so every push reaches you.
@@ -201,8 +204,9 @@ does, at a session start within the hour. Without it, re-run `setup.sh` or run
 | `scripts/pin-changelog.sh` | After `update-pins.sh`: the upstream commits behind each pin that moved |
 | `scripts/marketplace-lint.sh [--remote]` | Fail on duplicate names, missing local plugin folders, bad `sha` values, unlisted `plugins/` folders; `--remote` also asks GitHub whether each sha exists |
 
-CI runs the lint on every push. The monthly `update-pins` job puts the changelog in
-its pull request body. The `pin-drift` workflow writes the drift table to the job
+CI runs the lint on every push. The weekly `update-pins` job puts the changelog in
+its commit message and job summary; if the tests fail it commits nothing and the
+run shows as failed. The `pin-drift` workflow writes the drift table to the job
 summary every Monday, and comments it on any pull request that touches
 `marketplace.json`.
 

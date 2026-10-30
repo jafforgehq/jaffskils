@@ -1,13 +1,14 @@
 name: update-pins
 on:
   schedule:
-    - cron: '0 6 1 * *'
+    - cron: '0 6 * * 1'
   workflow_dispatch:
 
 permissions:
   contents: write
-  pull-requests: write
 
+# Moves every pin to upstream HEAD and commits straight to the branch, but only
+# after the same checks ci.yml runs have passed against the new pins.
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -17,22 +18,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/update-pins.sh
-      - name: Write the changelog for the pull request body
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Install jq
+        run: sudo apt-get install -y jq
+      - name: Validate manifest
+        run: claude plugin validate .
+      - name: Lint marketplace.json
         env:
           GH_TOKEN: ${{ github.token }}
-        run: scripts/pin-changelog.sh > "$RUNNER_TEMP/pin-changelog.md"
-      - name: Open a pull request if anything changed
+        run: scripts/marketplace-lint.sh --remote
+      - name: Run lint tests
+        run: tests/test-lint.sh
+      - name: Run tests
+        run: tests/test-setup.sh
+      - name: Run sync tests
+        run: tests/test-sync.sh
+      - name: Commit the new pins
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           git diff --quiet && { echo "Pins are current."; exit 0; }
-          branch="update-pins-$(date +%Y-%m)"
+          scripts/pin-changelog.sh > "$RUNNER_TEMP/pin-changelog.md"
+          cat "$RUNNER_TEMP/pin-changelog.md" >> "$GITHUB_STEP_SUMMARY"
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
-          { printf 'Monthly pin refresh. Read each commit list, then merge.\n\n'; cat "$RUNNER_TEMP/pin-changelog.md"; } > "$RUNNER_TEMP/pr-body.md"
-          git checkout -b "$branch"
-          git commit -am "chore: update upstream pins"
-          git push --force origin "$branch"
-          gh pr create --base main --head "$branch" \
-            --title "chore: update upstream pins ($(date +%Y-%m))" \
-            --body-file "$RUNNER_TEMP/pr-body.md"
+          { printf 'chore: update upstream pins\n\n'; cat "$RUNNER_TEMP/pin-changelog.md"; } | git commit -a -F -
+          git push origin HEAD
