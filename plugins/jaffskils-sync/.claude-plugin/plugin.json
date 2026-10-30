@@ -1,0 +1,7 @@
+{
+  "name": "jaffskils-sync",
+  "description": "Installs plugins newly added to the jaffskils marketplace at session start",
+  "author": {
+    "name": "jafforgehq"
+  }
+}
