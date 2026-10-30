@@ -38,6 +38,16 @@ marketplace_names() {
 
 installed_json() { echo "$CLAUDE_CONFIG_DIR/plugins/installed_plugins.json"; }
 
+# Put tests/claude-shim first on PATH as `claude`, logging to "$ENV_DIR.log".
+use_shim() {
+  export REAL_CLAUDE
+  REAL_CLAUDE=$(command -v claude)
+  mkdir -p "$ENV_DIR.bin"
+  ln -sf "$REPO_ROOT/tests/claude-shim" "$ENV_DIR.bin/claude"
+  export CLAUDE_SHIM_LOG="$ENV_DIR.log"
+  export PATH="$ENV_DIR.bin:$PATH"
+}
+
 json_has_plugin() {
   python3 -I -c 'import json,sys; sys.exit(0 if sys.argv[2] in json.load(open(sys.argv[1]))["plugins"] else 1)' \
     "$(installed_json)" "$1"
@@ -112,6 +122,25 @@ case_rerun_is_idempotent() {
   run_setup
   assert_eq "$RC" 0 "second run exit code"
   assert_eq "$(plugins_snapshot)" "$before" "installed plugins after re-run"
+}
+
+case_rerun_refreshes_marketplace() {
+  run_setup --no-clean --only rtk
+  assert_eq "$RC" 0 "first run exit code"
+  use_shim
+  run_setup --no-clean --only rtk
+  assert_eq "$RC" 0 "second run exit code"
+  grep -qx "plugin marketplace update jaffskils" "$CLAUDE_SHIM_LOG" ||
+    fail "re-run did not refresh the marketplace"
+}
+
+case_rerun_fails_when_refresh_fails() {
+  run_setup --no-clean --only rtk
+  use_shim
+  export CLAUDE_SHIM_FAIL="plugin marketplace update jaffskils"
+  run_setup --no-clean --only rtk
+  assert_eq "$RC" 1 "exit code"
+  grep -q "could not refresh marketplace 'jaffskils'" "$ENV_DIR.err" || fail "stderr does not name the problem"
 }
 
 case_runs_from_stdin() {

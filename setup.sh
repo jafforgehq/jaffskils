@@ -439,6 +439,7 @@ main() {
 
   if marketplace_listed; then
     echo "Marketplace '$MARKETPLACE' is already added." >&2
+    claude plugin marketplace update "$MARKETPLACE" </dev/null >&2 || die "could not refresh marketplace '$MARKETPLACE'"
   else
     claude plugin marketplace add "$SOURCE" </dev/null || die "could not add marketplace '$SOURCE'"
   fi
