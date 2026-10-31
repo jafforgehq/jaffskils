@@ -102,3 +102,83 @@ test('logo is two rows at 40 columns and one line below 32', async ($, on) => {
   expect(await narrow.find({ type: 'Text', text: /▄█/ })).toBeUndefined()
   await narrow.unmount()
 })
+
+const texts = async (ui: any, text: RegExp) => (await ui.findAll({ type: 'Text', text })).map((t: any) => t.text)
+
+test('a used skill goes to the top of used', async ($, on) => {
+  engine(on)
+  on('skill.prompt', (_: unknown, e: any) => ({ text: e.text }))
+
+  await $.skill.prompt({ skill: 'brainstorming', text: '' } as never)
+  await $.skill.prompt({ skill: 'plugin-authoring', text: '' } as never)
+
+  const ui = await $.ui.mount(pane())
+  expect((await texts(ui, /▸/))[0]).toMatch(/plugin-authoring/)
+  await ui.unmount()
+})
+
+test('a skill used twice shows once', async ($, on) => {
+  engine(on)
+  on('skill.prompt', (_: unknown, e: any) => ({ text: e.text }))
+
+  for (const skill of ['a-skill', 'b-skill', 'a-skill']) {
+    await $.skill.prompt({ skill, text: '' } as never)
+  }
+
+  const ui = await $.ui.mount(pane())
+  const rows = await texts(ui, /▸/)
+  expect(rows.map((t: string) => t.match(/▸ (\S+)/)?.[1])).toEqual(['a-skill', 'b-skill'])
+  await ui.unmount()
+})
+
+test('tool calls give counts, last command and changed files', async ($, on) => {
+  engine(on)
+  on('tool.call', () => ({ result: {} }))
+
+  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  await $.tool.call({ tool: 'Edit', file_path: '/p/a.ts', old_string: 'a', new_string: 'b' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'git status' } as never)
+
+  const ui = await $.ui.mount(pane())
+  expect(await ui.find({ type: 'Text', text: /Bash 2 · Edit 1/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /last \$ git status/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /FILES 1/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a multi-line Bash command shows its first line, truncated', async ($, on) => {
+  engine(on)
+  on('tool.call', () => ({ result: {} }))
+
+  await $.tool.call({ tool: 'Bash', command: `echo ${'x'.repeat(200)}\nrm -rf tmp` } as never)
+
+  const ui = await $.ui.mount(pane())
+  const last = (await ui.find({ type: 'Text', text: /last \$/ }))?.text ?? ''
+  expect(last.endsWith('…')).toBe(true)
+  expect(last.length).toBeLessThanOrEqual(40)
+  expect(last.includes('rm -rf')).toBe(false)
+  await ui.unmount()
+})
+
+test('todos list in-progress first, at most 3', async ($, on) => {
+  engine(on)
+  on('tool.call', () => ({ result: {} }))
+
+  await $.tool.call({
+    tool: 'TodoWrite',
+    todos: [
+      { content: 'ship it', status: 'completed' },
+      { content: 'first pending', status: 'pending' },
+      { content: 'second pending', status: 'pending' },
+      { content: 'third pending', status: 'pending' },
+      { content: 'doing now', status: 'in_progress' },
+    ],
+  } as never)
+
+  const ui = await $.ui.mount(pane())
+  expect(await ui.find({ type: 'Text', text: /TODOS 4 open/ })).toBeDefined()
+  const rows = await texts(ui, /^ [~·] \S/)
+  expect(rows).toHaveLength(3)
+  expect(rows[0]).toMatch(/doing now/)
+  await ui.unmount()
+})
