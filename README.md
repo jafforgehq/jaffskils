@@ -16,8 +16,8 @@ A personal [Claude Code](https://claude.com/claude-code) skills marketplace by
 [ponytail](https://github.com/DietrichGebert/ponytail), all referenced from upstream,
 and wrappers and plugins of my own: `rtk`, around [rtk](https://github.com/rtk-ai/rtk),
 `ccusage`, around [ccusage](https://github.com/ccusage/ccusage), `domain-scout`,
-`jaffskils-sync`, which installs newly added plugins on its own, and three terminal UI
-mods: `status-bar`, `done-toast` and `session-recap`. It is where my own skills will be
+`jaffskils-sync`, which installs newly added plugins on its own, and four terminal UI
+mods: `status-bar`, `done-toast`, `session-recap` and `sidecar`. It is where my own skills will be
 added over time.
 
 ## Set up a machine
@@ -129,7 +129,7 @@ changing nameservers and saving contacts always wait for a yes.
 
 ## Terminal UI mods
 
-Three small mods for Claude Code's mod system. They load like any plugin, and run on
+Four small mods for Claude Code's mod system. They load like any plugin, and run on
 a build that supports mods; elsewhere `/plugin` shows them but they do nothing.
 
 | Mod | What it does |
@@ -137,8 +137,9 @@ a build that supports mods; elsewhere `/plugin` shows them but they do nothing.
 | `status-bar` | One status line entry after each turn: session cost, git branch, model, context use (`$0.42 · main · opus · ctx 31%`) |
 | `done-toast` | A toast when a turn that took 30 seconds or more ends, or a subagent finishes |
 | `session-recap` | `/recap` prints the files changed, shell commands run, cost, context use and open TODOs |
+| `sidecar` | A pane beside the chat: jaffskils logo, session cost and context, subagents, skills loaded and used, MCP servers, tool activity, files and todos. It docks by itself when the terminal is about 144 columns wide; `/sidecar` opens or closes it at any width |
 
-Each has a `register.test.ts`; run one with `claude plugin test plugins/<name>`.
+Each has a `register.test.ts` (`.tsx` for `sidecar`); run one with `claude plugin test plugins/<name>`.
 
 ## jaffskils-sync
 
@@ -249,4 +250,4 @@ tests/test-sync.sh
 tests/test-lint.sh
 ```
 
-The UI mods' tests (`claude plugin test plugins/<name>`) are not run in CI.
+CI also runs every UI mod's tests with `claude plugin test`.
