@@ -422,3 +422,75 @@ test('a new skill draws bold for 2 seconds', async ($, on) => {
   expect((await later.find({ type: 'Text', text: /▸ brainstorming/ }))?.props.bold).toBeFalsy()
   await later.unmount()
 })
+
+// Final review fixes.
+const turnDone = (agentId?: string) => ({
+  answer: 'ok',
+  durationMs: 1000,
+  isAborted: false,
+  turnId: 't1',
+  reason: 'answer',
+  usage: { model: 'claude-opus-5-5' },
+  ...(agentId ? { agentId } : {}),
+})
+
+test('a subagent turn leaves the working dot alone', async ($, on) => {
+  engine(on)
+  on('turn.start', (_: unknown, e: any) => ({ turnId: e.turnId }))
+  on('turn.complete', (_: unknown, e: any) => ({ text: e.answer }))
+
+  await $.turn.start({ text: 'go', turnId: 't1' } as never)
+  await $.turn.complete(turnDone('a1') as never)
+
+  const ui = await $.ui.mount(pane(40, 40, 'vscode'))
+  expect(await ui.find({ type: 'Text', text: /●/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('/clear keeps the elapsed clock ticking in an open pane', async ($, on) => {
+  const { clock } = engine(on)
+  on('session.end', (_: unknown, e: any) => ({ sessionId: e.sessionId }))
+
+  await start($)
+  const ui = await $.ui.mount(pane())
+  await $.session.end({ reason: 'clear', sessionId: 's1' } as never)
+  await clock.advance(300_000)
+
+  expect(await keyText(ui, 'head-session')).toMatch(/5 min/)
+  await ui.unmount()
+})
+
+test('a long agent type and a multi-line todo still fit their rows', async ($, on) => {
+  const { clock } = engine(on, {
+    agentList: () => [{ id: 'a1', type: 'general-purpose', description: 'review the whole diff carefully', status: 'running' }],
+  })
+  on('tool.call', () => ({ result: {} }))
+
+  await spawn($)
+  await clock.advance(73_000)
+  await $.tool.call({ tool: 'TodoWrite', todos: [{ content: 'line one\nline two', status: 'pending' }] } as never)
+
+  for (const columns of [40, 16]) {
+    const ui = await $.ui.mount(pane(columns, 10, 'vscode'))
+    expect(((await keyText(ui, 'row-a1')) ?? '').length).toBeLessThanOrEqual(columns)
+    expect(await ui.find({ type: 'Text', text: /line two/ })).toBeUndefined()
+    expect((await ui.find({ type: 'Text', text: /FILES 0 · TODOS 1 open/ }))?.props.wrap).toBe('truncate')
+    expect((await ui.find({ type: 'Text', text: /^MCP/ }))?.props.wrap).toBe('truncate')
+    await ui.unmount()
+  }
+})
+
+test('a failing agent list stops the poll', async ($, on) => {
+  let calls = 0
+  const { clock } = engine(on, {
+    agentList: () => {
+      calls += 1
+      throw new Error('agents down')
+    },
+  })
+
+  await spawn($)
+  await clock.advance(5_000)
+
+  expect(calls).toBe(1)
+})

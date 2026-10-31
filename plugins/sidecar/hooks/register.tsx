@@ -129,8 +129,14 @@ function settleFlash($: EngineInterface): void {
   $.clock.after(FLASH_MS + 1, () => void update($, tick, n => n + 1))
 }
 
-async function refreshAgents($: EngineInterface): Promise<void> {
-  const list = await $.agent.list()
+// Returns false when the list could not be read; the rows stay as they were.
+async function refreshAgents($: EngineInterface): Promise<boolean> {
+  let list: Awaited<ReturnType<EngineInterface['agent']['list']>>
+  try {
+    list = await $.agent.list()
+  } catch {
+    return false
+  }
   const now = await $.clock.now()
   await update($, agents, rows => {
     const byId = new Map(rows.map(r => [r.id, r]))
@@ -147,14 +153,15 @@ async function refreshAgents($: EngineInterface): Promise<void> {
     }
     return [...byId.values()]
   })
+  return true
 }
 
 // One poll at a time while any agent is active; it stops itself after.
 let poll: Timer | undefined
 
 async function pollTick($: EngineInterface): Promise<void> {
-  await refreshAgents($)
-  if (!(await read($, agents)).some(r => ACTIVE.includes(r.status))) {
+  const isRead = await refreshAgents($)
+  if (!isRead || !(await read($, agents)).some(r => ACTIVE.includes(r.status))) {
     poll?.cancel()
     poll = undefined
   }
@@ -214,9 +221,11 @@ function filesLines(el: El, changed: FileChange[], list: Todo[], now: number): L
       isHeader: true,
       node: (
         <Box key="head-files">
-          <Text bold color="claude" inverse={changed.some(f => now - f.at < FLASH_MS)}>FILES {changed.length}</Text>
-          <Text dimColor> · </Text>
-          <Text bold color="claude">TODOS {open.length} open</Text>
+          <Text wrap="truncate">
+            <Text bold color="claude" inverse={changed.some(f => now - f.at < FLASH_MS)}>FILES {changed.length}</Text>
+            <Text dimColor> · </Text>
+            <Text bold color="claude">TODOS {open.length} open</Text>
+          </Text>
         </Box>
       ),
     },
@@ -225,9 +234,9 @@ function filesLines(el: El, changed: FileChange[], list: Todo[], now: number): L
       isHeader: false,
       node:
         t.status === 'in_progress' ? (
-          <Text color="warning" wrap="truncate">{` ~ ${t.content}`}</Text>
+          <Text color="warning" wrap="truncate">{` ~ ${oneLine(t.content, Infinity)}`}</Text>
         ) : (
-          <Text dimColor wrap="truncate">{` · ${t.content}`}</Text>
+          <Text dimColor wrap="truncate">{` · ${oneLine(t.content, Infinity)}`}</Text>
         ),
     })),
   ]
@@ -299,11 +308,13 @@ function mcpLines(el: El, f: Facts): Line[] {
       isHeader: true,
       node: (
         <Box key="head-mcp">
-          <Text bold color="claude">MCP</Text>
-          {mcp ? <Text color="success">{`  ✓ ${mcp.connected.length}`}</Text> : <Text>  —</Text>}
-          {(mcp?.missing ?? []).map(name => (
-            <Text color="error">{`  ✗ ${name}`}</Text>
-          ))}
+          <Text wrap="truncate">
+            <Text bold color="claude">MCP</Text>
+            {mcp ? <Text color="success">{`  ✓ ${mcp.connected.length}`}</Text> : <Text>  —</Text>}
+            {(mcp?.missing ?? []).map(name => (
+              <Text color="error">{`  ✗ ${name}`}</Text>
+            ))}
+          </Text>
         </Box>
       ),
     },
@@ -323,6 +334,10 @@ function agentLines(el: El, rows: AgentRow[], now: number, columns: number, moti
       const glyph = r.status === 'completed' ? '✓' : isFailed ? '✗' : ACTIVE.includes(r.status) ? '●' : '·'
       const color = r.status === 'completed' ? 'success' : isFailed ? 'error' : 'claude'
       const time = r.status === 'completed' ? 'done' : isFailed ? 'failed' : r.status === 'idle' ? 'idle' : elapsed(now - r.seenAt)
+      // 3 columns of glyph, then type, description and time cut to fit the row.
+      const timeText = ` ${time}`
+      const typeWidth = Math.max(0, Math.min(9, columns - 3 - timeText.length - 1))
+      const typeText = `${oneLine(r.type, typeWidth).padEnd(typeWidth)} `
       return {
         section: 'agents' as const,
         isHeader: false,
@@ -333,11 +348,11 @@ function agentLines(el: El, rows: AgentRow[], now: number, columns: number, moti
             ) : (
               <Text color={color} bold={r.endedAt !== undefined && now - r.endedAt < FLASH_MS}>{` ${glyph} `}</Text>
             )}
-          <Button key={`agent-${r.id}`} plain onPress={() => view(r.id)}>
-            {`${r.type.padEnd(9)} `}
-            <Text dimColor>{oneLine(r.description, Math.max(4, columns - 22))}</Text>
-            {` ${time}`}
-          </Button>
+            <Button key={`agent-${r.id}`} plain onPress={() => view(r.id)}>
+              {typeText}
+              <Text dimColor>{oneLine(r.description, Math.max(0, columns - 3 - typeText.length - timeText.length))}</Text>
+              {timeText}
+            </Button>
           </Box>
         ),
       }
@@ -423,7 +438,9 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // /clear ends the session but starts no new one in this process: keep ticking.
   on('session.end', async (_$, e, next) => {
+    if (e.reason === 'clear') return next(e)
     for (const timer of timers) timer.cancel()
     timers = []
     poll?.cancel()
@@ -432,16 +449,19 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // Subagent turns fire these too; only the main loop's count.
   on('turn.start', async ($, e, next) => {
+    if (e.agentId !== undefined) return next(e)
     await update($, isWorking, () => true)
 
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
+    if (e.agentId !== undefined) return next(e)
     await update($, isWorking, () => false)
     await update($, shimmer, n => n + 1)
-    if (e.agentId === undefined && e.usage?.model) {
+    if (e.usage?.model) {
       const model = shortModel(e.usage.model)
       await update($, facts, f => ({ ...f, model }))
     }
