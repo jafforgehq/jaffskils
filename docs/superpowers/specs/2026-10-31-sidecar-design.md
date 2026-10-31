@@ -125,9 +125,9 @@ Surfaces without `Client` (VS Code, mobile) draw the same pane with static glyph
 | SESSION | `$.session.usage()` (cost, context %, `startedAt`); model from `turn.complete`'s `usage.model`, shortened as `status-bar` does | `session.start`, `turn.complete`, every 30 s for elapsed minutes |
 | Working dot | `turn.start` sets it, `turn.complete` clears it | on those events |
 | AGENTS | `$.agent.list()`: `id`, `type`, `description`, `status` | `agent.spawn`, `turn.complete`, and every 1 s while any agent is `pending`, `running` or `waiting` (timer stopped otherwise) |
-| SKILLS totals | `$.session.measure()` → `skills.totalSkills`, `skills.tokens`, `skills.skillFrontmatter[].pluginName` | `session.start`, `turn.complete` |
+| SKILLS totals | `$.session.usage({ breakdown: 'summary' })` → `context.breakdown.skills`: `totalSkills`, `tokens`, `skillFrontmatter[].pluginName` | `session.start`, `turn.complete` |
 | SKILLS used | `skill.prompt` event (`e.skill`) | on the event |
-| MCP connected | distinct `serverName` in `measure().mcpTools` | with SKILLS totals |
+| MCP connected | distinct `serverName` in `context.breakdown.mcpTools` | with SKILLS totals |
 | MCP configured | `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`): top-level `mcpServers`, plus `projects[<root>].mcpServers`; `<root>/.mcp.json` `mcpServers` minus `projects[<root>].disabledMcpjsonServers`; minus `projects[<root>].disabledMcpServers`. `<root>` is `$.session.root()` | `session.start`, `turn.complete` |
 | MCP not connected | configured names with no tools in `mcpTools` | derived |
 | TOOLS | `tool.call` (all tools): count per `e.tool`; Bash `e.command` as last command | on the event |
@@ -144,7 +144,7 @@ render hook only reads; handlers and timers write.
   header with `—` and the rest of the pane draws.
 - A missing or unreadable `.claude.json` or `.mcp.json` means no `✗` list, only the
   connected count.
-- `$.session.measure()` failing hides SKILLS totals and MCP; `used` still shows.
+- A breakdown call that fails hides SKILLS totals and MCP; `used` still shows.
 - Timers stop on `session.end`; a reload starts them again from `session.start`.
 
 ## Testing
