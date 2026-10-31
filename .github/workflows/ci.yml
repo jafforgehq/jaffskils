@@ -31,3 +31,5 @@ jobs:
         run: tests/test-setup.sh
       - name: Run sync tests
         run: tests/test-sync.sh
+      - name: Run mod tests
+        run: for p in status-bar done-toast session-recap sidecar; do claude plugin test "plugins/$p"; done
