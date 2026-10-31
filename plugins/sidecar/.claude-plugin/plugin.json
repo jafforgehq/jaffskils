@@ -1,0 +1,8 @@
+{
+  "name": "sidecar",
+  "description": "A pane beside the chat: skills, subagents, MCP servers, tools and todos, live",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "jafforgehq"
+  }
+}

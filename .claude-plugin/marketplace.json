@@ -145,6 +145,11 @@
       "source": "./plugins/session-recap"
     },
     {
+      "name": "sidecar",
+      "description": "Live session pane: skills, subagents, MCP servers, tools and todos beside the chat",
+      "source": "./plugins/sidecar"
+    },
+    {
       "name": "jaffskils-sync",
       "description": "Installs plugins newly added to this marketplace at session start; skipped plugins stay skipped",
       "source": "./plugins/jaffskils-sync"
