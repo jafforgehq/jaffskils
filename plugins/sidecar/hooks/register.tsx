@@ -23,20 +23,22 @@ const agents = atom({ plugin: 'sidecar', key: 'agents' } as const, [], { shape: 
 const ACTIVE = ['pending', 'running', 'waiting']
 const FINISHED = ['completed', 'failed', 'killed']
 const SHOW_FINISHED_MS = 180_000
+const FLASH_MS = 2_000
 
 type El = Elements[keyof Elements]
-type Line = { section: Section; isHeader: boolean; node: RenderElement }
+// height: rows the line takes when it is more than one (the animated logo).
+type Line = { section: Section; isHeader: boolean; node: RenderElement; height?: number }
 
 // Colour of column i of n along the logo's orange-to-violet gradient.
 function gradient(i: number, n: number): string {
   const t = n <= 1 ? 0 : i / (n - 1)
-  const hex = FROM.map((a, k) => Math.round(a + (TO[k] - a) * t).toString(16).padStart(2, '0'))
+  const hex = FROM.map((a, k) => Math.round(a + ((TO[k] ?? a) - a) * t).toString(16).padStart(2, '0'))
   return `#${hex.join('')}`
 }
 
 // First line of text, cut to width with a trailing ellipsis.
 function oneLine(text: string, width: number): string {
-  const line = text.split('\n')[0]
+  const line = text.split('\n')[0] ?? ''
   if (width < 1) return ''
   return line.length <= width ? line : `${line.slice(0, width - 1)}…`
 }
@@ -122,6 +124,11 @@ function elapsed(ms: number): string {
 
 // Merges $.agent.list() into the agents atom. The API gives no start time, so
 // seenAt is the first refresh that saw the agent.
+// Redraws once the 2 s flash of a new item is over.
+function settleFlash($: EngineInterface): void {
+  $.clock.after(FLASH_MS + 1, () => void update($, tick, n => n + 1))
+}
+
 async function refreshAgents($: EngineInterface): Promise<void> {
   const list = await $.agent.list()
   const now = await $.clock.now()
@@ -129,7 +136,10 @@ async function refreshAgents($: EngineInterface): Promise<void> {
     const byId = new Map(rows.map(r => [r.id, r]))
     for (const info of list) {
       const row: AgentRow = { ...(byId.get(info.id) ?? { seenAt: now }), id: info.id, type: info.type, description: info.description, status: info.status }
-      if (FINISHED.includes(row.status) && row.endedAt === undefined) row.endedAt = now
+      if (FINISHED.includes(row.status) && row.endedAt === undefined) {
+        row.endedAt = now
+        settleFlash($)
+      }
       byId.set(info.id, row)
     }
     for (const row of byId.values()) {
@@ -159,12 +169,13 @@ function header(el: El, label: string, detail: string, key: string): RenderEleme
   return (
     <Box key={key}>
       <Text bold color="claude">{label}</Text>
-      <Text>{detail ? `  ${detail}` : ''}</Text>
+      <Text wrap="truncate">{detail ? `  ${detail}` : ''}</Text>
     </Box>
   )
 }
 
 function skillsUsedLines(el: El, used: SkillUse[], now: number): Line[] {
+  // A skill used in the last 2 s draws bold.
   const { Box, Text } = el
   return used.map((skill, i) => ({
     section: 'skills',
@@ -172,7 +183,7 @@ function skillsUsedLines(el: El, used: SkillUse[], now: number): Line[] {
     node: (
       <Box key={`used-${skill.name}`}>
         <Text dimColor>{i === 0 ? ' used ' : '      '}</Text>
-        <Text color="claude" wrap="truncate">▸ {skill.name}</Text>
+        <Text color="claude" bold={now - skill.at < FLASH_MS} wrap="truncate">▸ {skill.name}</Text>
         <Text dimColor> {ago(now - skill.at)}</Text>
       </Box>
     ),
@@ -193,7 +204,7 @@ function toolsLines(el: El, counts: Record<string, number>, last: string, column
   return lines
 }
 
-function filesLines(el: El, changed: FileChange[], list: Todo[]): Line[] {
+function filesLines(el: El, changed: FileChange[], list: Todo[], now: number): Line[] {
   const { Box, Text } = el
   const open = list.filter(t => t.status !== 'completed')
   const shown = [...open.filter(t => t.status === 'in_progress'), ...open.filter(t => t.status === 'pending')].slice(0, 3)
@@ -203,7 +214,7 @@ function filesLines(el: El, changed: FileChange[], list: Todo[]): Line[] {
       isHeader: true,
       node: (
         <Box key="head-files">
-          <Text bold color="claude">FILES {changed.length}</Text>
+          <Text bold color="claude" inverse={changed.some(f => now - f.at < FLASH_MS)}>FILES {changed.length}</Text>
           <Text dimColor> · </Text>
           <Text bold color="claude">TODOS {open.length} open</Text>
         </Box>
@@ -223,20 +234,29 @@ function filesLines(el: El, changed: FileChange[], list: Todo[]): Line[] {
 }
 
 function sessionLines(el: El, f: Facts, now: number, columns: number): Line[] {
-  const { Text } = el
+  const { Box, Text } = el
   if (f.failed.includes('session')) {
     return [{ section: 'session', isHeader: true, node: header(el, 'SESSION', '—', 'head-session') }]
   }
   const cost = f.costUsd === undefined ? '—' : `$${f.costUsd.toFixed(2)}`
   const minutes = Math.max(0, Math.floor((now - (f.startedAt ?? now)) / 60_000))
-  const width = columns - 10
+  const width = Math.max(4, columns - 10)
+  const p = f.contextPercent
   const bar =
-    f.contextPercent === undefined
-      ? 'ctx —'
-      : `ctx ${'█'.repeat(Math.round((f.contextPercent / 100) * width)).padEnd(width, '░')} ${f.contextPercent}%`
+    p === undefined ? (
+      <Text>ctx —</Text>
+    ) : (
+      <Box>
+        <Text>ctx </Text>
+        <Text color={p < 50 ? 'success' : p < 80 ? 'warning' : 'error'}>
+          {'█'.repeat(Math.min(width, Math.round((p / 100) * width))).padEnd(width, '░')}
+        </Text>
+        <Text>{` ${p}%`}</Text>
+      </Box>
+    )
   return [
     { section: 'session', isHeader: true, node: header(el, 'SESSION', `${f.model ?? '—'} · ${cost} · ${minutes} min`, 'head-session') },
-    { section: 'session', isHeader: false, node: <Text>{bar}</Text> },
+    { section: 'session', isHeader: false, node: bar },
   ]
 }
 
@@ -257,7 +277,8 @@ function skillsTotalLines(el: El, f: Facts, columns: number): Line[] {
   while (i < s.byPlugin.length && rows.length < 2) {
     let row = ''
     while (i < s.byPlugin.length) {
-      const part = `${s.byPlugin[i][0]} ${s.byPlugin[i][1]}`
+      const [name, count] = s.byPlugin[i] ?? ['', 0]
+      const part = `${name} ${count}`
       const next = row ? `${row} · ${part}` : part
       if (row && next.length > columns - 2) break
       row = next
@@ -289,8 +310,8 @@ function mcpLines(el: El, f: Facts): Line[] {
   ]
 }
 
-function agentLines(el: El, rows: AgentRow[], now: number, columns: number, view: (id: string) => void): Line[] {
-  const { Button, Text } = el
+function agentLines(el: El, rows: AgentRow[], now: number, columns: number, motion: boolean, view: (id: string) => void): Line[] {
+  const { Box, Button, Client, Text } = el as Elements['terminal']
   const running = rows.filter(r => ACTIVE.includes(r.status)).length
   const done = rows.filter(r => r.endedAt !== undefined).length
   const detail = rows.length === 0 ? '—' : [running && `${running} running`, done && `${done} done`].filter(Boolean).join(' · ')
@@ -306,22 +327,60 @@ function agentLines(el: El, rows: AgentRow[], now: number, columns: number, view
         section: 'agents' as const,
         isHeader: false,
         node: (
+          <Box key={`row-${r.id}`}>
+            {motion && ACTIVE.includes(r.status) ? (
+              <Client key={`spinner-${r.id}`} module="./motion.tsx" props={{ kind: 'spinner', color }} width={3} />
+            ) : (
+              <Text color={color} bold={r.endedAt !== undefined && now - r.endedAt < FLASH_MS}>{` ${glyph} `}</Text>
+            )}
           <Button key={`agent-${r.id}`} plain onPress={() => view(r.id)}>
-            <Text color={color}>{` ${glyph} `}</Text>
             {`${r.type.padEnd(9)} `}
             <Text dimColor>{oneLine(r.description, Math.max(4, columns - 22))}</Text>
             {` ${time}`}
           </Button>
+          </Box>
         ),
       }
     }),
   ]
 }
 
-function logoLines(el: El, columns: number): Line[] {
-  const { Text } = el
+function logoLines(el: El, columns: number, motion = false, shimmerCount = 0, working = false): Line[] {
+  const { Box, Client, Text } = el as Elements['terminal']
+  const dot = !working ? null : motion ? (
+    <Client key="pulse" module="./motion.tsx" props={{ kind: 'pulse', color: 'claude' }} width={3} />
+  ) : (
+    <Text color="claude">{'  ●'}</Text>
+  )
   if (columns < LOGO_COLUMNS) {
-    return [{ section: 'logo', isHeader: true, node: <Text color="claude" bold>◆ jaffskils</Text> }]
+    return [
+      {
+        section: 'logo',
+        isHeader: true,
+        node: (
+          <Box>
+            <Text color="claude" bold wrap="truncate">◆ jaffskils</Text>
+            {dot}
+          </Box>
+        ),
+      },
+    ]
+  }
+  if (motion) {
+    const colors = [...LOGO[0]].map((_, i) => gradient(i, LOGO[0].length))
+    return [
+      {
+        section: 'logo',
+        isHeader: true,
+        height: 2,
+        node: (
+          <Box>
+            <Client key="logo" module="./motion.tsx" props={{ kind: 'logo', rows: [...LOGO], colors, shimmer: shimmerCount }} width={LOGO[0].length} height={2} />
+            {dot}
+          </Box>
+        ),
+      },
+    ]
   }
   return LOGO.map((row, r) => ({
     section: 'logo',
@@ -331,9 +390,24 @@ function logoLines(el: El, columns: number): Line[] {
         {[...row].map((ch, i) => (
           <Text color={gradient(i, row.length)}>{ch}</Text>
         ))}
+        {r === 1 && working ? <Text color="claude">{'  ●'}</Text> : null}
       </Text>
     ),
   }))
+}
+
+// Fits the lines into the pane's rows: detail lines go first, from the bottom
+// section up; then the logo shrinks to one line; then the end is cut.
+function fitRows(lines: Line[], rows: number, compactLogo: Line[]): Line[] {
+  const height = (ls: Line[]) => ls.reduce((n, l) => n + (l.height ?? 1), 0)
+  let kept = [...lines]
+  for (let i = kept.length - 1; i >= 0 && height(kept) > rows; i--) {
+    const line = kept[i]
+    if (line && !line.isHeader && line.section !== 'logo') kept.splice(i, 1)
+  }
+  if (height(kept) > rows) kept = [...compactLogo, ...kept.filter(l => l.section !== 'logo')]
+  while (kept.length > 0 && height(kept) > rows) kept.pop()
+  return kept
 }
 
 export const register: Register = on => {
@@ -386,6 +460,7 @@ export const register: Register = on => {
   on('skill.prompt', async ($, e, next) => {
     const at = await $.clock.now()
     await update($, skillsUsed, list => [{ name: e.skill, at }, ...list.filter(s => s.name !== e.skill)].slice(0, 5))
+    settleFlash($)
 
     return next(e)
   })
@@ -397,6 +472,7 @@ export const register: Register = on => {
     } else if (e.tool === 'Edit' || e.tool === 'Write') {
       const at = await $.clock.now()
       await update($, files, list => (list.some(f => f.path === e.file_path) ? list : [...list, { path: e.file_path, at }]))
+      settleFlash($)
     } else if (e.tool === 'TodoWrite') {
       await update($, todos, () => e.todos.map(t => ({ content: t.content, status: t.status })))
     }
@@ -420,17 +496,21 @@ export const register: Register = on => {
     const columns = e.props.bodyColumns
     await read($, tick)
     const now = await $.clock.now()
+    const motion = e.surface === 'terminal' || e.surface === 'desktop'
+    const working = await read($, isWorking)
     const lines = [
-      ...logoLines(el, columns),
+      ...logoLines(el, columns, motion, await read($, shimmer), working),
       ...sessionLines(el, await read($, facts), now, columns),
-      ...agentLines(el, await read($, agents), now, columns, id => void $.ui.view({ agentId: id })),
+      ...agentLines(el, await read($, agents), now, columns, motion, id => void $.ui.view({ agentId: id })),
       ...skillsTotalLines(el, await read($, facts), columns),
       ...skillsUsedLines(el, await read($, skillsUsed), now),
       ...mcpLines(el, await read($, facts)),
       ...toolsLines(el, await read($, tools), await read($, lastCommand), columns),
-      ...filesLines(el, await read($, files), await read($, todos)),
+      ...filesLines(el, await read($, files), await read($, todos), now),
     ]
 
-    return <Box flexDirection="column">{lines.map(line => line.node)}</Box>
+    const fitted = fitRows(lines, e.props.scroll.bodyRows, logoLines(el, 0, false, 0, working))
+
+    return <Box flexDirection="column">{fitted.map(line => line.node)}</Box>
   })
 }

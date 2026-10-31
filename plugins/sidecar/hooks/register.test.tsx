@@ -98,7 +98,7 @@ test('/sidecar closes an open pane and opens a closed one', async ($, on) => {
 test('logo is two rows at 40 columns and one line below 32', async ($, on) => {
   engine(on)
 
-  const wide = await $.ui.mount(pane(40))
+  const wide = await $.ui.mount(pane(40, 40, 'vscode'))
   expect(await wide.find({ type: 'Text', text: /▄█ █▀█/ })).toBeDefined()
   await wide.unmount()
 
@@ -326,4 +326,99 @@ test('pressing an agent row calls ui.view with its id', async ($, on) => {
   await ui.press({ key: 'agent-a1' })
   expect(rec.viewed).toEqual([{ agentId: 'a1' }])
   await ui.unmount()
+})
+
+// A session with something in every section.
+async function busy($: any, on: any, percent = 31) {
+  const handles = engine(on, {
+    usage: usageWith(
+      {
+        percent,
+        breakdown: {
+          skills: { totalSkills: 2, includedSkills: 2, tokens: 900, skillFrontmatter: [skillRow('superpowers'), skillRow('caveman')] },
+          mcpTools: [mcpTool('godot')],
+        },
+      },
+      { cost: { usd: 1.84 } },
+    ),
+    agentList: () => [explorer('running')],
+    files: { '/home/u/.claude.json': JSON.stringify({ mcpServers: { godot: {}, blender: {} } }) },
+  })
+  on('tool.call', () => ({ result: {} }))
+  on('skill.prompt', (_: unknown, e: any) => ({ text: e.text }))
+  await start($)
+  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  await $.tool.call({ tool: 'Write', file_path: '/p/b.ts', content: '' } as never)
+  await $.tool.call({ tool: 'TodoWrite', todos: [{ content: 'doing now', status: 'in_progress' }] } as never)
+  await $.skill.prompt({ skill: 'brainstorming', text: '' } as never)
+  await spawn($)
+  await handles.clock.advance(1_000)
+  return handles
+}
+
+test('on terminal the logo and spinners are Client modules; on vscode they are static', async ($, on) => {
+  await busy($, on)
+
+  const terminal = await $.ui.mount(pane(40, 40, 'terminal'))
+  expect(await terminal.find({ type: 'Client', key: 'logo' })).toBeDefined()
+  expect(await terminal.find({ type: 'Client', key: 'spinner-a1' })).toBeDefined()
+  await terminal.unmount()
+
+  const vscode = await $.ui.mount(pane(40, 40, 'vscode'))
+  expect(await vscode.find({ type: 'Client' })).toBeUndefined()
+  expect(await vscode.find({ type: 'Text', text: /●/ })).toBeDefined()
+  await vscode.unmount()
+})
+
+test('in a 10-row pane every section header still shows', async ($, on) => {
+  await busy($, on)
+
+  const ui = await $.ui.mount(pane(40, 10))
+  for (const key of ['head-session', 'head-agents', 'head-skills', 'head-mcp', 'head-tools', 'head-files']) {
+    expect(await ui.find({ key })).toBeDefined()
+  }
+  expect((await ui.find({ type: 'Box' }))?.children.length).toBeLessThanOrEqual(10)
+  await ui.unmount()
+})
+
+test('an 8-column pane draws a 4-cell bar, not a negative one', async ($, on) => {
+  await busy($, on)
+
+  const ui = await $.ui.mount(pane(8))
+  expect((await ui.find({ type: 'Text', text: /^[█░]{4,}$/ }))?.text).toHaveLength(4)
+  await ui.unmount()
+})
+
+test('context bar colour follows the 50/80 thresholds', async ($, on) => {
+  let percent = 49
+  engine(on, { usage: () => usageWith({ percent })() })
+  const colour = async () => {
+    await start($)
+    const ui = await $.ui.mount(pane())
+    const c = (await ui.find({ type: 'Text', text: /^[█░]{4,}$/ }))?.props.color
+    await ui.unmount()
+    return c
+  }
+
+  expect(await colour()).toBe('success')
+  percent = 50
+  expect(await colour()).toBe('warning')
+  percent = 80
+  expect(await colour()).toBe('error')
+})
+
+test('a new skill draws bold for 2 seconds', async ($, on) => {
+  const { clock } = engine(on)
+  on('skill.prompt', (_: unknown, e: any) => ({ text: e.text }))
+
+  await $.skill.prompt({ skill: 'brainstorming', text: '' } as never)
+
+  const now = await $.ui.mount(pane())
+  expect((await now.find({ type: 'Text', text: /▸ brainstorming/ }))?.props.bold).toBe(true)
+  await now.unmount()
+
+  await clock.advance(2_001)
+  const later = await $.ui.mount(pane())
+  expect((await later.find({ type: 'Text', text: /▸ brainstorming/ }))?.props.bold).toBeFalsy()
+  await later.unmount()
 })
