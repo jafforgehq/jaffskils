@@ -182,3 +182,97 @@ test('todos list in-progress first, at most 3', async ($, on) => {
   expect(rows[0]).toMatch(/doing now/)
   await ui.unmount()
 })
+
+const usageWith = (context: object, extra: object = {}) => () => ({
+  startedAt: 0,
+  context: { window: 200000, ...context },
+  rateLimits: [],
+  ...extra,
+})
+const skillRow = (pluginName: string) => ({ name: 'x', source: 'plugin', pluginName, tokens: 1 })
+const mcpTool = (serverName: string) => ({ name: `mcp__${serverName}__t`, serverName, tokens: 1, isLoaded: true })
+const keyText = async (ui: any, key: string) => (await ui.find({ key }))?.text
+
+test('skills totals and per-plugin counts come from the breakdown', async ($, on) => {
+  engine(on, {
+    usage: usageWith({
+      percent: 31,
+      breakdown: {
+        skills: {
+          totalSkills: 3,
+          includedSkills: 3,
+          tokens: 9100,
+          skillFrontmatter: [skillRow('godot-prompter'), skillRow('godot-prompter'), skillRow('caveman')],
+        },
+        mcpTools: [],
+      },
+    }),
+  })
+
+  await start($)
+
+  const ui = await $.ui.mount(pane())
+  expect(await keyText(ui, 'head-skills')).toMatch(/SKILLS\s+3 · 2 plugins · ~9\.1k/)
+  expect(await ui.find({ type: 'Text', text: /godot-prompter 2/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('MCP shows connected count and configured servers without tools', async ($, on) => {
+  engine(on, {
+    usage: usageWith({ breakdown: { mcpTools: [mcpTool('godot')] } }),
+    files: { '/home/u/.claude.json': JSON.stringify({ mcpServers: { godot: {}, blender: {} } }) },
+  })
+
+  await start($)
+
+  const ui = await $.ui.mount(pane())
+  expect(await ui.find({ type: 'Text', text: /✓ 1/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /✗ blender/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a server in disabledMcpServers is not listed as missing', async ($, on) => {
+  engine(on, {
+    usage: usageWith({ breakdown: { mcpTools: [mcpTool('godot')] } }),
+    files: {
+      '/home/u/.claude.json': JSON.stringify({
+        mcpServers: { godot: {}, blender: {} },
+        projects: { '/proj': { disabledMcpServers: ['blender'] } },
+      }),
+    },
+  })
+
+  await start($)
+
+  const ui = await $.ui.mount(pane())
+  expect(await ui.find({ type: 'Text', text: /✓ 1/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /blender/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a failing session.usage leaves SESSION as — and other sections drawn', async ($, on) => {
+  engine(on, {
+    usage: () => {
+      throw new Error('usage down')
+    },
+  })
+
+  await start($)
+
+  const ui = await $.ui.mount(pane())
+  expect(await keyText(ui, 'head-session')).toMatch(/^SESSION\s+—$/)
+  expect(await ui.find({ key: 'head-tools' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('before the first turn, missing cost and context draw —, not NaN', async ($, on) => {
+  engine(on)
+
+  await start($)
+
+  const ui = await $.ui.mount(pane())
+  const all = (await texts(ui, /./)).join('\n')
+  expect(all).not.toMatch(/NaN|undefined/)
+  expect(await keyText(ui, 'head-session')).toMatch(/—/)
+  await ui.unmount()
+})

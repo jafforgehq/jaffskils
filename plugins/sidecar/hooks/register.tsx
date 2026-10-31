@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
-import type { Elements, Register, RenderElement, Timer } from 'claude-code'
+import type { Elements, EngineInterface, Register, RenderElement, Timer } from 'claude-code'
 
-import type { FileChange, SkillUse, Todo } from '../types'
+import type { Facts, FileChange, Section, SkillUse, Todo } from '../types'
 
 const PANE = 'sidecar'
 const LOGO = [' █ ▄▀█ █▀▀ █▀▀ █▀ █▄▀ █ █   █▀', '▄█ █▀█ █▀  █▀  ▄█ █ █ █ █▄▄ ▄█'] as const
@@ -16,9 +16,10 @@ const tools = atom({ plugin: 'sidecar', key: 'tools' } as const, {}, { shape: 't
 const lastCommand = atom({ plugin: 'sidecar', key: 'lastCommand' } as const, '')
 const files = atom({ plugin: 'sidecar', key: 'files' } as const, [], { shape: 'files-1' })
 const todos = atom({ plugin: 'sidecar', key: 'todos' } as const, [], { shape: 'todos-1' })
+const facts = atom({ plugin: 'sidecar', key: 'facts' } as const, { failed: [] }, { shape: 'facts-1' })
+const isWorking = atom({ plugin: 'sidecar', key: 'isWorking' } as const, false)
 
 type El = Elements[keyof Elements]
-type Section = 'logo' | 'session' | 'agents' | 'skills' | 'mcp' | 'tools' | 'files'
 type Line = { section: Section; isHeader: boolean; node: RenderElement }
 
 // Colour of column i of n along the logo's orange-to-violet gradient.
@@ -41,10 +42,76 @@ function ago(ms: number): string {
   return `${Math.floor(ms / 3_600_000)}h ago`
 }
 
-function header(el: El, label: string, detail: string): RenderElement {
+type McpProject = { mcpServers?: Record<string, unknown>; disabledMcpServers?: string[]; disabledMcpjsonServers?: string[] }
+type ClaudeJson = { mcpServers?: Record<string, unknown>; projects?: Record<string, McpProject> }
+type McpJson = { mcpServers?: Record<string, unknown> }
+
+// Configured MCP servers that have no tools in the session, so did not connect.
+function missingServers(claudeJson: ClaudeJson, mcpJson: McpJson, root: string, connected: string[]): string[] {
+  const project = claudeJson.projects?.[root] ?? {}
+  const disabled = project.disabledMcpServers ?? []
+  const names = [
+    ...Object.keys(claudeJson.mcpServers ?? {}),
+    ...Object.keys(project.mcpServers ?? {}),
+    ...Object.keys(mcpJson.mcpServers ?? {}).filter(n => !(project.disabledMcpjsonServers ?? []).includes(n)),
+  ]
+  return [...new Set(names)].filter(n => !disabled.includes(n) && !connected.includes(n))
+}
+
+function shortModel(model: string): string {
+  return model.replace(/^claude-/, '').replace(/-\d.*$/, '')
+}
+
+async function readJson($: EngineInterface, path: string): Promise<object> {
+  try {
+    return JSON.parse(await $.fs.read(path)) ?? {}
+  } catch {
+    return {}
+  }
+}
+
+async function loadFacts($: EngineInterface): Promise<void> {
+  const next: Facts = { model: (await read($, facts)).model, failed: [] }
+  try {
+    const usage = await $.session.usage()
+    next.costUsd = usage.cost?.usd
+    next.contextPercent = usage.context.percent
+    next.startedAt = usage.startedAt
+  } catch {
+    next.failed.push('session')
+  }
+  try {
+    const breakdown = (await $.session.usage({ breakdown: 'summary' })).context.breakdown
+    if (breakdown?.skills) {
+      const counts = new Map<string, number>()
+      for (const skill of breakdown.skills.skillFrontmatter) {
+        const owner = skill.pluginName ?? skill.source
+        counts.set(owner, (counts.get(owner) ?? 0) + 1)
+      }
+      next.skills = {
+        total: breakdown.skills.totalSkills,
+        tokens: breakdown.skills.tokens,
+        byPlugin: [...counts].sort((a, b) => b[1] - a[1]),
+      }
+    }
+    if (breakdown) {
+      const connected = [...new Set(breakdown.mcpTools.map(t => t.serverName))]
+      const dir = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? (await $.env.get('HOME')) ?? ''
+      const root = await $.session.root()
+      const claudeJson = (await readJson($, `${dir}/.claude.json`)) as ClaudeJson
+      const mcpJson = (await readJson($, `${root}/.mcp.json`)) as McpJson
+      next.mcp = { connected, missing: missingServers(claudeJson, mcpJson, root, connected) }
+    }
+  } catch {
+    next.failed.push('skills', 'mcp')
+  }
+  await update($, facts, () => next)
+}
+
+function header(el: El, label: string, detail: string, key: string): RenderElement {
   const { Box, Text } = el
   return (
-    <Box>
+    <Box key={key}>
       <Text bold color="claude">{label}</Text>
       <Text>{detail ? `  ${detail}` : ''}</Text>
     </Box>
@@ -73,7 +140,7 @@ function toolsLines(el: El, counts: Record<string, number>, last: string, column
     .slice(0, 3)
     .map(([tool, n]) => `${tool} ${n}`)
     .join(' · ')
-  const lines: Line[] = [{ section: 'tools', isHeader: true, node: header(el, 'TOOLS', top || '—') }]
+  const lines: Line[] = [{ section: 'tools', isHeader: true, node: header(el, 'TOOLS', top || '—', 'head-tools') }]
   if (last) {
     lines.push({ section: 'tools', isHeader: false, node: <Text dimColor>{`last $ ${oneLine(last, columns - 7)}`}</Text> })
   }
@@ -89,7 +156,7 @@ function filesLines(el: El, changed: FileChange[], list: Todo[]): Line[] {
       section: 'files',
       isHeader: true,
       node: (
-        <Box>
+        <Box key="head-files">
           <Text bold color="claude">FILES {changed.length}</Text>
           <Text dimColor> · </Text>
           <Text bold color="claude">TODOS {open.length} open</Text>
@@ -106,6 +173,73 @@ function filesLines(el: El, changed: FileChange[], list: Todo[]): Line[] {
           <Text dimColor wrap="truncate">{` · ${t.content}`}</Text>
         ),
     })),
+  ]
+}
+
+function sessionLines(el: El, f: Facts, now: number, columns: number): Line[] {
+  const { Text } = el
+  if (f.failed.includes('session')) {
+    return [{ section: 'session', isHeader: true, node: header(el, 'SESSION', '—', 'head-session') }]
+  }
+  const cost = f.costUsd === undefined ? '—' : `$${f.costUsd.toFixed(2)}`
+  const minutes = Math.max(0, Math.floor((now - (f.startedAt ?? now)) / 60_000))
+  const width = columns - 10
+  const bar =
+    f.contextPercent === undefined
+      ? 'ctx —'
+      : `ctx ${'█'.repeat(Math.round((f.contextPercent / 100) * width)).padEnd(width, '░')} ${f.contextPercent}%`
+  return [
+    { section: 'session', isHeader: true, node: header(el, 'SESSION', `${f.model ?? '—'} · ${cost} · ${minutes} min`, 'head-session') },
+    { section: 'session', isHeader: false, node: <Text>{bar}</Text> },
+  ]
+}
+
+function skillsTotalLines(el: El, f: Facts, columns: number): Line[] {
+  const { Text } = el
+  const s = f.skills
+  const lines: Line[] = [
+    {
+      section: 'skills',
+      isHeader: true,
+      node: header(el, 'SKILLS', s ? `${s.total} · ${s.byPlugin.length} plugins · ~${(s.tokens / 1000).toFixed(1)}k` : '', 'head-skills'),
+    },
+  ]
+  if (!s) return lines
+  // Pack "plugin count" pairs into at most two lines, then say how many are left.
+  const rows: string[] = []
+  let i = 0
+  while (i < s.byPlugin.length && rows.length < 2) {
+    let row = ''
+    while (i < s.byPlugin.length) {
+      const part = `${s.byPlugin[i][0]} ${s.byPlugin[i][1]}`
+      const next = row ? `${row} · ${part}` : part
+      if (row && next.length > columns - 2) break
+      row = next
+      i += 1
+    }
+    rows.push(row)
+  }
+  if (i < s.byPlugin.length) rows[rows.length - 1] += ` · ${s.byPlugin.length - i} more`
+  return [...lines, ...rows.map(row => ({ section: 'skills' as const, isHeader: false, node: <Text dimColor wrap="truncate">{` ${row}`}</Text> }))]
+}
+
+function mcpLines(el: El, f: Facts): Line[] {
+  const { Box, Text } = el
+  const mcp = f.mcp
+  return [
+    {
+      section: 'mcp',
+      isHeader: true,
+      node: (
+        <Box key="head-mcp">
+          <Text bold color="claude">MCP</Text>
+          {mcp ? <Text color="success">{`  ✓ ${mcp.connected.length}`}</Text> : <Text>  —</Text>}
+          {(mcp?.missing ?? []).map(name => (
+            <Text color="error">{`  ✗ ${name}`}</Text>
+          ))}
+        </Box>
+      ),
+    },
   ]
 }
 
@@ -134,6 +268,7 @@ export const register: Register = on => {
     await $.command.register({ name: PANE, description: 'Open or close the sidecar pane' })
     void $.ui.open({ id: PANE, title: PANE })
     await update($, shimmer, n => n + 1)
+    await loadFacts($)
     timers.push($.clock.every(30_000, () => void update($, tick, n => n + 1)))
 
     return next(e)
@@ -142,6 +277,24 @@ export const register: Register = on => {
   on('session.end', async (_$, e, next) => {
     for (const timer of timers) timer.cancel()
     timers = []
+
+    return next(e)
+  })
+
+  on('turn.start', async ($, e, next) => {
+    await update($, isWorking, () => true)
+
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    await update($, isWorking, () => false)
+    await update($, shimmer, n => n + 1)
+    if (e.agentId === undefined && e.usage?.model) {
+      const model = shortModel(e.usage.model)
+      await update($, facts, f => ({ ...f, model }))
+    }
+    await loadFacts($)
 
     return next(e)
   })
@@ -185,8 +338,10 @@ export const register: Register = on => {
     const now = await $.clock.now()
     const lines = [
       ...logoLines(el, columns),
-      { section: 'skills' as const, isHeader: true, node: header(el, 'SKILLS', '') },
+      ...sessionLines(el, await read($, facts), now, columns),
+      ...skillsTotalLines(el, await read($, facts), columns),
       ...skillsUsedLines(el, await read($, skillsUsed), now),
+      ...mcpLines(el, await read($, facts)),
       ...toolsLines(el, await read($, tools), await read($, lastCommand), columns),
       ...filesLines(el, await read($, files), await read($, todos)),
     ]
