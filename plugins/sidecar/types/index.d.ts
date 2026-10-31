@@ -2,6 +2,14 @@ export type SkillUse = { name: string; at: number }
 export type FileChange = { path: string; at: number }
 export type Todo = { content: string; status: 'pending' | 'in_progress' | 'completed' }
 export type Section = 'logo' | 'session' | 'agents' | 'skills' | 'mcp' | 'tools' | 'files'
+export type AgentRow = {
+  id: string
+  type: string
+  description: string
+  status: 'pending' | 'running' | 'waiting' | 'idle' | 'completed' | 'failed' | 'killed'
+  seenAt: number
+  endedAt?: number
+}
 export type Facts = {
   model?: string
   costUsd?: number
@@ -24,6 +32,7 @@ declare module 'claude-code' {
       todos: Shaped<Todo[]>
       facts: Shaped<Facts>
       isWorking: boolean
+      agents: Shaped<AgentRow[]>
     }
   }
 }

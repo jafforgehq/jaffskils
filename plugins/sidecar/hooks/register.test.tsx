@@ -52,6 +52,11 @@ function engine(on: any, over: Partial<Mocks> = {}) {
     return { value: undefined }
   })
   on('ui.panes', () => ({ value: m.panes }))
+  on('ui.view', (_: unknown, e: any) => {
+    rec.viewed.push(e)
+    return { value: {} }
+  })
+  on('agent.spawn', () => ({ model: 'm', agentId: 'a1' }))
   on('command.register', (_: unknown, e: any) => {
     rec.commands.push(e.name)
     return { value: { command: e.name } }
@@ -274,5 +279,51 @@ test('before the first turn, missing cost and context draw —, not NaN', async 
   const all = (await texts(ui, /./)).join('\n')
   expect(all).not.toMatch(/NaN|undefined/)
   expect(await keyText(ui, 'head-session')).toMatch(/—/)
+  await ui.unmount()
+})
+
+const spawn = ($: any) => $.agent.spawn({ prompt: 'p', description: 'find hooks', subagentType: 'Explore' } as never)
+const explorer = (status: string) => ({ id: 'a1', type: 'Explore', description: 'find hooks', status })
+
+test('a running agent shows its row with elapsed time', async ($, on) => {
+  const { clock } = engine(on, { agentList: () => [explorer('running')] })
+
+  await spawn($)
+  await clock.advance(73_000)
+
+  const ui = await $.ui.mount(pane())
+  expect(await keyText(ui, 'agent-a1')).toMatch(/Explore.*find hooks.*1m12s/)
+  await ui.unmount()
+})
+
+test('a finished agent stays 3 minutes then only counts', async ($, on) => {
+  let status = 'running'
+  const { clock } = engine(on, { agentList: () => [explorer(status)] })
+
+  await spawn($)
+  await clock.advance(2_000)
+  status = 'completed'
+  await clock.advance(1_000)
+
+  const soon = await $.ui.mount(pane())
+  expect(await keyText(soon, 'agent-a1')).toMatch(/done/)
+  await soon.unmount()
+
+  await clock.advance(180_001)
+  const later = await $.ui.mount(pane())
+  expect(await later.find({ key: 'agent-a1' })).toBeUndefined()
+  expect(await keyText(later, 'head-agents')).toMatch(/1 done/)
+  await later.unmount()
+})
+
+test('pressing an agent row calls ui.view with its id', async ($, on) => {
+  const { clock, rec } = engine(on, { agentList: () => [explorer('running')] })
+
+  await spawn($)
+  await clock.advance(1_000)
+
+  const ui = await $.ui.mount(pane())
+  await ui.press({ key: 'agent-a1' })
+  expect(rec.viewed).toEqual([{ agentId: 'a1' }])
   await ui.unmount()
 })

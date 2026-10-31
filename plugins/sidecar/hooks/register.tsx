@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Elements, EngineInterface, Register, RenderElement, Timer } from 'claude-code'
 
-import type { Facts, FileChange, Section, SkillUse, Todo } from '../types'
+import type { AgentRow, Facts, FileChange, Section, SkillUse, Todo } from '../types'
 
 const PANE = 'sidecar'
 const LOGO = [' █ ▄▀█ █▀▀ █▀▀ █▀ █▄▀ █ █   █▀', '▄█ █▀█ █▀  █▀  ▄█ █ █ █ █▄▄ ▄█'] as const
@@ -18,6 +18,11 @@ const files = atom({ plugin: 'sidecar', key: 'files' } as const, [], { shape: 'f
 const todos = atom({ plugin: 'sidecar', key: 'todos' } as const, [], { shape: 'todos-1' })
 const facts = atom({ plugin: 'sidecar', key: 'facts' } as const, { failed: [] }, { shape: 'facts-1' })
 const isWorking = atom({ plugin: 'sidecar', key: 'isWorking' } as const, false)
+const agents = atom({ plugin: 'sidecar', key: 'agents' } as const, [], { shape: 'agents-1' })
+
+const ACTIVE = ['pending', 'running', 'waiting']
+const FINISHED = ['completed', 'failed', 'killed']
+const SHOW_FINISHED_MS = 180_000
 
 type El = Elements[keyof Elements]
 type Line = { section: Section; isHeader: boolean; node: RenderElement }
@@ -106,6 +111,47 @@ async function loadFacts($: EngineInterface): Promise<void> {
     next.failed.push('skills', 'mcp')
   }
   await update($, facts, () => next)
+}
+
+function elapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s`
+  return `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`
+}
+
+// Merges $.agent.list() into the agents atom. The API gives no start time, so
+// seenAt is the first refresh that saw the agent.
+async function refreshAgents($: EngineInterface): Promise<void> {
+  const list = await $.agent.list()
+  const now = await $.clock.now()
+  await update($, agents, rows => {
+    const byId = new Map(rows.map(r => [r.id, r]))
+    for (const info of list) {
+      const row: AgentRow = { ...(byId.get(info.id) ?? { seenAt: now }), id: info.id, type: info.type, description: info.description, status: info.status }
+      if (FINISHED.includes(row.status) && row.endedAt === undefined) row.endedAt = now
+      byId.set(info.id, row)
+    }
+    for (const row of byId.values()) {
+      if (row.endedAt === undefined && !list.some(a => a.id === row.id)) byId.set(row.id, { ...row, status: 'completed', endedAt: now })
+    }
+    return [...byId.values()]
+  })
+}
+
+// One poll at a time while any agent is active; it stops itself after.
+let poll: Timer | undefined
+
+async function pollTick($: EngineInterface): Promise<void> {
+  await refreshAgents($)
+  if (!(await read($, agents)).some(r => ACTIVE.includes(r.status))) {
+    poll?.cancel()
+    poll = undefined
+  }
+}
+
+function pollAgents($: EngineInterface): void {
+  poll ??= $.clock.every(1000, () => void pollTick($))
 }
 
 function header(el: El, label: string, detail: string, key: string): RenderElement {
@@ -243,6 +289,35 @@ function mcpLines(el: El, f: Facts): Line[] {
   ]
 }
 
+function agentLines(el: El, rows: AgentRow[], now: number, columns: number, view: (id: string) => void): Line[] {
+  const { Button, Text } = el
+  const running = rows.filter(r => ACTIVE.includes(r.status)).length
+  const done = rows.filter(r => r.endedAt !== undefined).length
+  const detail = rows.length === 0 ? '—' : [running && `${running} running`, done && `${done} done`].filter(Boolean).join(' · ')
+  const shown = rows.filter(r => r.endedAt === undefined || now - r.endedAt <= SHOW_FINISHED_MS)
+  return [
+    { section: 'agents', isHeader: true, node: header(el, 'AGENTS', detail, 'head-agents') },
+    ...shown.map(r => {
+      const isFailed = r.status === 'failed' || r.status === 'killed'
+      const glyph = r.status === 'completed' ? '✓' : isFailed ? '✗' : ACTIVE.includes(r.status) ? '●' : '·'
+      const color = r.status === 'completed' ? 'success' : isFailed ? 'error' : 'claude'
+      const time = r.status === 'completed' ? 'done' : isFailed ? 'failed' : r.status === 'idle' ? 'idle' : elapsed(now - r.seenAt)
+      return {
+        section: 'agents' as const,
+        isHeader: false,
+        node: (
+          <Button key={`agent-${r.id}`} plain onPress={() => view(r.id)}>
+            <Text color={color}>{` ${glyph} `}</Text>
+            {`${r.type.padEnd(9)} `}
+            <Text dimColor>{oneLine(r.description, Math.max(4, columns - 22))}</Text>
+            {` ${time}`}
+          </Button>
+        ),
+      }
+    }),
+  ]
+}
+
 function logoLines(el: El, columns: number): Line[] {
   const { Text } = el
   if (columns < LOGO_COLUMNS) {
@@ -277,6 +352,8 @@ export const register: Register = on => {
   on('session.end', async (_$, e, next) => {
     for (const timer of timers) timer.cancel()
     timers = []
+    poll?.cancel()
+    poll = undefined
 
     return next(e)
   })
@@ -295,6 +372,13 @@ export const register: Register = on => {
       await update($, facts, f => ({ ...f, model }))
     }
     await loadFacts($)
+    await refreshAgents($)
+
+    return next(e)
+  })
+
+  on('agent.spawn', ($, e, next) => {
+    pollAgents($)
 
     return next(e)
   })
@@ -339,6 +423,7 @@ export const register: Register = on => {
     const lines = [
       ...logoLines(el, columns),
       ...sessionLines(el, await read($, facts), now, columns),
+      ...agentLines(el, await read($, agents), now, columns, id => void $.ui.view({ agentId: id })),
       ...skillsTotalLines(el, await read($, facts), columns),
       ...skillsUsedLines(el, await read($, skillsUsed), now),
       ...mcpLines(el, await read($, facts)),
