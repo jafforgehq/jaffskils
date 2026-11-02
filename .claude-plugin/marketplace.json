@@ -21,7 +21,7 @@
         "source": "git-subdir",
         "url": "https://github.com/upstash/context7.git",
         "path": "plugins/claude/context7",
-        "sha": "8a0289e4c5e28684b7c4ced5353af2893d1329f9"
+        "sha": "ceaf5f91f48949eaa6e4da5e66f3f59d1b44556d"
       }
     },
     {
@@ -44,7 +44,7 @@
       "source": {
         "source": "github",
         "repo": "coreyhaines31/marketingskills",
-        "sha": "820ad2c1c0ac4cc350158bd7912c753681a7d173"
+        "sha": "88c79f6528a9347420e57ceb1fff9a60de651768"
       }
     },
     {
@@ -53,7 +53,7 @@
       "source": {
         "source": "github",
         "repo": "JuliusBrussee/caveman",
-        "sha": "9b68f7ed12b05e7efaff18e65c5a3fc2849fd0a4"
+        "sha": "2e068f735253cce28256744804785f01887d9646"
       }
     },
     {
@@ -89,7 +89,7 @@
       "source": {
         "source": "github",
         "repo": "Manavarya09/design-extract",
-        "sha": "d2c28da8aae3098a7f7dc02fb4355f3f803edb6c"
+        "sha": "5b94e9567c0e4f98a2f4def9e4d549349bec4b29"
       }
     },
     {
