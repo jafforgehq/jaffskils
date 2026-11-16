@@ -21,7 +21,7 @@
         "source": "git-subdir",
         "url": "https://github.com/upstash/context7.git",
         "path": "plugins/claude/context7",
-        "sha": "6e68ffcbad0e23cf4fa8c11795ce9e551aeef19b"
+        "sha": "7cc30af18051dcbd794f03452f9bd2baedfc25d8"
       }
     },
     {
@@ -35,7 +35,7 @@
       "source": {
         "source": "github",
         "repo": "blader/humanizer",
-        "sha": "0ef9fe5bc3572734fd3ae6c448fe00a30cd5dcf0"
+        "sha": "b48c832f0f809c1b5658edbb838c2521b72f2413"
       }
     },
     {
@@ -44,7 +44,7 @@
       "source": {
         "source": "github",
         "repo": "coreyhaines31/marketingskills",
-        "sha": "96798cf38736ecdba015a1d2b0521b0c8f8f41dd"
+        "sha": "1f837447b20bb6f0e72d87b80ece1c221c362c7d"
       }
     },
     {
@@ -53,7 +53,7 @@
       "source": {
         "source": "github",
         "repo": "JuliusBrussee/caveman",
-        "sha": "3dc497a7f858c774d6e15b25e8c6120ef3a0eda8"
+        "sha": "9b243662ff98d392bc0a95b865a554583d71be75"
       }
     },
     {
@@ -71,7 +71,7 @@
       "source": {
         "source": "github",
         "repo": "jame581/GodotPrompter",
-        "sha": "d7b26cdb5fae14d4ef7b713c5bf259395e75c3c6"
+        "sha": "426e8ab597473d1c71a11a04f6f0f2e1182a8e39"
       }
     },
     {
@@ -89,7 +89,7 @@
       "source": {
         "source": "github",
         "repo": "Manavarya09/design-extract",
-        "sha": "6050fdb470d87c14f3db42a07ba782ca93286c75"
+        "sha": "461163d730c4648857452b6757bdcbb7c9f614c4"
       }
     },
     {
@@ -98,7 +98,7 @@
       "source": {
         "source": "github",
         "repo": "android/skills",
-        "sha": "5815d27fda564aa9f07ebdcb5e57ed3e8d904e0d"
+        "sha": "c72942584fff970dac86ced78b367fce0c441e52"
       }
     },
     {
