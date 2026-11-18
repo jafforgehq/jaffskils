@@ -15,7 +15,8 @@ A personal [Claude Code](https://claude.com/claude-code) skills marketplace by
 [swift-concurrency](https://github.com/AvdLee/Swift-Concurrency-Agent-Skill) and
 [ponytail](https://github.com/DietrichGebert/ponytail), all referenced from upstream,
 and wrappers and plugins of my own: `rtk`, around [rtk](https://github.com/rtk-ai/rtk),
-`ccusage`, around [ccusage](https://github.com/ccusage/ccusage), `domain-scout`,
+`ccusage`, around [ccusage](https://github.com/ccusage/ccusage), `app-store-compliance`,
+around [app-store-compliance](https://github.com/mjmirza/app-store-compliance), `domain-scout`,
 `jaffskils-sync`, which installs newly added plugins on its own, and four terminal UI
 mods: `status-bar`, `done-toast`, `session-recap` and `sidecar`. It is where my own skills will be
 added over time.
@@ -107,6 +108,17 @@ a small skill of mine that teaches Claude its commands (`daily`, `monthly`, `ses
 downloads the latest npm package when used; nothing is installed or pinned. It needs
 Node. The status line is not switched on for you: the skill gives the `settings.json`
 snippet and asks before editing.
+
+## app-store-compliance
+
+app-store-compliance is a pre-submission scanner and rejection reference for iOS and
+Android apps. It publishes no Claude Code plugin, and its own installer edits
+`~/.claude/settings.json` and adds a hook that also matches ordinary builds such as
+`flutter build` and `xcodebuild archive`. So the `app-store-compliance` plugin here is a
+small skill of mine that ships none of its files: it tells Claude to clone one pinned
+commit into `~/.cache/app-store-compliance` and run the guard on a project path. No hook
+is registered. Needs git and bash. The pin is in the skill text, so `update-pins` does
+not move it. The upstream licence is OpenRoots ORA 2.3.
 
 ## rtk
 

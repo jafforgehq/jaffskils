@@ -153,6 +153,11 @@
       "name": "jaffskils-sync",
       "description": "Installs plugins newly added to this marketplace at session start; skipped plugins stay skipped",
       "source": "./plugins/jaffskils-sync"
+    },
+    {
+      "name": "app-store-compliance",
+      "description": "Pre-submission scan for App Store and Google Play rejection risks; runs a pinned clone of mjmirza/app-store-compliance, no hook",
+      "source": "./plugins/app-store-compliance"
     }
   ]
 }
