@@ -1,0 +1,5 @@
+{
+  "name": "app-store-compliance",
+  "description": "Pre-submission scan for App Store and Google Play rejection risks (runs a pinned clone of mjmirza/app-store-compliance; needs git and bash)",
+  "author": { "name": "jafforgehq" }
+}
